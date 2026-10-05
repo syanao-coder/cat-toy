@@ -102,12 +102,25 @@ details summary { cursor: pointer; color: var(--sub); font-size: 14px; margin-to
 </section>
 
 <section class="card" id="detail"></section>
+
+<section class="card" id="maint" hidden>
+  <details>
+    <summary style="margin-top:0">メンテナンス（ESP32）</summary>
+    <div id="fwInfo" style="font-size:14px;margin:10px 0"></div>
+    <div style="font-size:14px;color:var(--sub)">新しいファームウェア（cattoy_esp32.ino.bin）</div>
+    <input type="file" id="fwFile" accept=".bin" style="margin:8px 0;width:100%">
+    <button class="plain" id="fwBtn">ファームウェアを書き換える</button>
+    <div id="fwMsg" style="font-size:14px;margin:8px 0;white-space:pre-wrap"></div>
+    <button class="plain" id="rebootBtn">ESP32 を再起動</button>
+  </details>
+</section>
 </main>
 <script>
 const $ = id => document.getElementById(id);
 let st = null, timer = null, busy = false, pts = [];
 
 function fmtMin(s) { return s < 60 ? Math.round(s) + ' 秒' : Math.round(s / 60) + ' 分'; }
+function fmtSpan(s) { return s >= 86400 ? Math.floor(s / 86400) + ' 日' : s >= 3600 ? Math.floor(s / 3600) + ' 時間' : fmtMin(s); }
 
 function render() {
   if (!st) return;
@@ -139,6 +152,14 @@ function render() {
   ];
   if (st.esp32 && st.esp32.online) rows.push(['ESP32 の電波', st.esp32.rssi + ' dBm']);
   $('detail').innerHTML = rows.map(r => '<div class="row"><span>' + r[0] + '</span><span>' + r[1] + '</span></div>').join('');
+
+  $('maint').hidden = !st.esp32;
+  if (st.esp32) {
+    const e = st.esp32;
+    $('fwInfo').textContent = e.online
+      ? 'ファームウェア ' + e.fw + '（' + (e.built || '') + '・' + (e.partition || '') + '）　起動から ' + fmtSpan(e.uptime_s || 0)
+      : 'ESP32 とつながっていません';
+  }
 }
 
 async function refresh() {
@@ -174,6 +195,31 @@ $('liveImg').onclick = e => {
   $('pts').textContent = 'play_area = [' + pts.join(', ') + ']\\nfinish_point = ' + pts[pts.length - 1];
 };
 $('clearPts').onclick = () => { pts = []; $('pts').textContent = '（まだ記録していません）'; };
+
+$('fwBtn').onclick = () => {
+  const f = $('fwFile').files[0];
+  if (!f) { $('fwMsg').textContent = 'ファイルを選んでください'; return; }
+  if (!confirm(f.name + ' を書き込みます。書き換え中はレーザーとサーボが止まり、終わると ESP32 が再起動します。よろしいですか？')) return;
+  const xhr = new XMLHttpRequest();
+  xhr.open('POST', '/api/esp32/firmware');
+  xhr.upload.onprogress = e => { if (e.lengthComputable) $('fwMsg').textContent = '送信中… ' + Math.round(e.loaded / e.total * 100) + '%'; };
+  xhr.onload = () => {
+    let r = {}; try { r = JSON.parse(xhr.responseText); } catch (e) {}
+    $('fwMsg').textContent = xhr.status === 200
+      ? '書き換えました。ESP32 が再起動します（1 分ほどで上の版の表示が変わります）。\\n新しい版で Wi-Fi につながらない場合は、自動で前の版に戻ります。'
+      : '失敗しました: ' + (r.error || xhr.status);
+    $('fwBtn').disabled = false;
+  };
+  xhr.onerror = () => { $('fwMsg').textContent = '送信に失敗しました'; $('fwBtn').disabled = false; };
+  $('fwBtn').disabled = true;
+  xhr.send(f);
+};
+$('rebootBtn').onclick = async () => {
+  if (!confirm('ESP32 を再起動しますか？')) return;
+  const r = await fetch('/api/esp32/reboot', { method: 'POST' });
+  const j = await r.json().catch(() => ({}));
+  $('fwMsg').textContent = r.ok ? '再起動しています…' : '失敗しました: ' + (j.error || r.status);
+};
 
 function start() { refresh(); timer = setInterval(refresh, 2000); }
 function stop() { clearInterval(timer); timer = null; }

@@ -25,6 +25,8 @@
   通信が 0.3 秒途絶えたら ESP32 が自分でレーザーを消す。
 - **自動キャリブレーション**: レーザーを格子状に点滅させてカメラで位置を測り、「画像の位置 → サーボ角度」と映像の遅れを自動で求める。
 - **スマホで操作**: ON/OFF・状態・今日遊んだ時間・ライブ映像。ESP32 の BOOT ボタンでも ON/OFF できる。
+- **設置したまま更新**: ESP32 のファームウェアはネットワーク越しに書き換えられ、起動に失敗したら自動で前の版に戻る。
+  Wi-Fi が変わっても、設定用のアクセスポイントからつなぎ直せる。
 - **NAS に優しい**: OFF・休憩中は認識を止め、猫がいない間は 1 秒に 1 回だけ確認する。認識は GPU（なければ自動で CPU）。
 
 ## ⚠️ 安全について（必ずお読みください）
@@ -58,6 +60,9 @@ NAS がない場合は、Raspberry Pi 1 台で完結させる構成でも動き�
 | `cattoy hw-test [--laser]` | 配線確認（レーザーの点滅とサーボを可動範囲の端まで動かす） |
 | `cattoy aim --angles PAN TILT` / `--point X Y` | 指定した角度・画像上の位置を照らす |
 | `cattoy snapshot` | 目盛り付きのカメラ画像を保存する |
+| `cattoy esp32-update FILE` | ESP32 のファームウェアをネットワーク越しに書き換える（失敗したら自動で前の版に戻る） |
+| `cattoy esp32-status` / `esp32-reboot` | ESP32 の状態を見る／再起動する |
+| `cattoy esp32-wifi SSID` | ESP32 がつなぐ Wi-Fi を変える |
 
 コンテナでは `docker compose -f docker/compose.yml run --rm cattoy <コマンド>` で実行します。
 
@@ -121,6 +126,7 @@ pytest
 | `cattoy/calibration.py` | 画像座標 ⇔ サーボ角度の対応付け、レーザー点の検出 |
 | `cattoy/calibrate.py` | 自動キャリブレーションの手順と映像の遅れの測定 |
 | `cattoy/esp32.py` | ESP32 との通信（映像の受信、サーボ・レーザーの指令） |
+| `cattoy/firmware.py` | ESP32 の遠隔メンテナンス（ファームウェアの書き換え・再起動・Wi-Fi 設定） |
 | `cattoy/hardware.py` | カメラ・サーボ・レーザーの共通部分（Raspberry Pi 用とモックを含む） |
 | `cattoy/preview.py` / `webpage.py` | 操作画面とライブ映像 |
 | `cattoy/cli.py` | コマンド |

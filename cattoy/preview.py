@@ -25,6 +25,8 @@ from .tracker import CatState, Detection
 
 log = logging.getLogger(__name__)
 
+MAX_POST_BYTES = 4 * 1024 * 1024  # ファームウェア（最大 3MB）が入る大きさ
+
 _PAGE = """<!doctype html>
 <html lang="ja"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -68,7 +70,10 @@ class PreviewServer:
         port: int,
         status: Callable[[], dict] | None = None,
         set_enabled: Callable[[bool], None] | None = None,
+        actions: dict[str, Callable[[bytes], dict]] | None = None,
     ):
+        """actions: POST で呼べる追加の操作（パス → 受け取った本文を渡して結果を返す関数）。"""
+        actions = dict(actions or {})
         self._jpeg: bytes | None = None
         self._cond = threading.Condition()
         self._viewers = 0
@@ -132,15 +137,28 @@ class PreviewServer:
                     self.send_error(404)
 
             def do_POST(self) -> None:
+                try:
+                    n = int(self.headers.get("Content-Length", "0"))
+                except ValueError:
+                    n = -1
+                if not 0 <= n <= MAX_POST_BYTES:
+                    self._json({"error": "送られたデータの大きさが不正です"}, 413)
+                    return
+                body = self.rfile.read(n)
                 if self.path == "/api/enabled" and set_enabled is not None and status is not None:
                     try:
-                        n = int(self.headers.get("Content-Length", "0"))
-                        body = json.loads(self.rfile.read(n) or b"{}")
-                        set_enabled(bool(body["enabled"]))
+                        set_enabled(bool(json.loads(body or b"{}")["enabled"]))
                     except (ValueError, KeyError):
                         self._json({"error": "enabled (true/false) を送ってください"}, 400)
                         return
                     self._json(status())
+                elif self.path in actions:
+                    try:
+                        self._json(actions[self.path](body))
+                    except ValueError as e:  # 送られた内容がおかしい
+                        self._json({"error": str(e)}, 400)
+                    except RuntimeError as e:  # ESP32 とのやりとりに失敗した
+                        self._json({"error": str(e)}, 502)
                 else:
                     self.send_error(404)
 

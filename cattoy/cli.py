@@ -114,6 +114,78 @@ def _cmd_snapshot(cfg: Config, args: argparse.Namespace) -> None:
     print(f"保存しました: {args.output}")
 
 
+def _esp32_link(cfg: Config):
+    from .esp32 import Esp32Link
+
+    if not cfg.esp32.host:
+        raise SystemExit("config.toml の [esp32] host に ESP32 の IP アドレスを書いてください")
+    return Esp32Link(cfg.esp32)
+
+
+def _print_status(st: dict | None) -> None:
+    if st is None:
+        print("ESP32 から応答がありません")
+        return
+    print(f"  ファームウェア {st.get('fw')}（{st.get('built')}・{st.get('partition')}）")
+    print(f"  Wi-Fi {st.get('ssid')}  電波 {st.get('rssi')} dBm  IP {st.get('ip')}  起動から {st.get('uptime_s')} 秒")
+
+
+def _cmd_esp32_status(cfg: Config, args: argparse.Namespace) -> None:
+    link = _esp32_link(cfg)
+    try:
+        _print_status(link.status())
+    finally:
+        link.close()
+
+
+def _cmd_esp32_update(cfg: Config, args: argparse.Namespace) -> None:
+    """ファームウェアをネットワーク越しに書き換える（ESP32 を取り外さなくてよい）。"""
+    from . import firmware
+
+    data = Path(args.file).read_bytes()
+    info = firmware.inspect_image(data)
+    link = _esp32_link(cfg)
+    try:
+        print("今の ESP32:")
+        _print_status(link.status())
+        print(f"書き込むファイル: {args.file}（{info['size']:,} バイト・{info['built']} にビルド）")
+        print("送信中です。終わるまで電源を切らないでください…")
+        firmware.upload_firmware(cfg.esp32, data)
+        print("書き換えました。再起動を待っています…")
+        st = firmware.wait_until_back(link.status)
+        if st is None:
+            print("ESP32 が戻ってきません。1 分ほど待って `cattoy esp32-status` で確認してください。")
+            print("（新しい版で Wi-Fi につながらなかった場合は、自動で前の版に戻ります）")
+        else:
+            print("再起動しました:")
+            _print_status(st)
+    finally:
+        link.close()
+
+
+def _cmd_esp32_reboot(cfg: Config, args: argparse.Namespace) -> None:
+    from . import firmware
+
+    link = _esp32_link(cfg)
+    try:
+        firmware.reboot(cfg.esp32)
+        print("再起動しています…")
+        _print_status(firmware.wait_until_back(link.status))
+    finally:
+        link.close()
+
+
+def _cmd_esp32_wifi(cfg: Config, args: argparse.Namespace) -> None:
+    """ESP32 がつなぐ Wi-Fi を変える（ルーターを替える前に、今の Wi-Fi につながっている間に行う）。"""
+    import getpass
+
+    from . import firmware
+
+    password = args.password if args.password is not None else getpass.getpass("新しい Wi-Fi のパスワード: ")
+    print(firmware.set_wifi(cfg.esp32, args.ssid, password))
+    print("ESP32 は新しい Wi-Fi につなぎ直します。IP アドレスが変わったら config.toml の [esp32] host を直してください。")
+
+
 def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(prog="cattoy", description="猫を見つけてレーザーで遊ぶ自動おもちゃ")
     p.add_argument("-c", "--config", default="config.toml", help="設定ファイル（既定: config.toml）")
@@ -143,6 +215,21 @@ def main(argv: list[str] | None = None) -> None:
     sp = sub.add_parser("snapshot", help="目盛り付きのカメラ画像を保存する")
     sp.add_argument("-o", "--output", default="snapshot.jpg")
     sp.set_defaults(func=_cmd_snapshot)
+
+    sp = sub.add_parser("esp32-status", help="ESP32 の状態（ファームウェアの版・電波など）を見る")
+    sp.set_defaults(func=_cmd_esp32_status)
+
+    sp = sub.add_parser("esp32-update", help="ESP32 のファームウェアをネットワーク越しに書き換える")
+    sp.add_argument("file", help="Arduino IDE で出力した cattoy_esp32.ino.bin")
+    sp.set_defaults(func=_cmd_esp32_update)
+
+    sp = sub.add_parser("esp32-reboot", help="ESP32 を再起動する")
+    sp.set_defaults(func=_cmd_esp32_reboot)
+
+    sp = sub.add_parser("esp32-wifi", help="ESP32 がつなぐ Wi-Fi を変える")
+    sp.add_argument("ssid")
+    sp.add_argument("--password", default=None, help="省略すると入力を求める")
+    sp.set_defaults(func=_cmd_esp32_wifi)
 
     args = p.parse_args(argv)
     logging.basicConfig(

@@ -112,11 +112,22 @@ ESP32 の基板の BOOT ボタンでも ON/OFF を切り替えられます。
 
 ## 更新するとき
 
-新しいファイルで上書きしてから（`docker/data` は消さないこと）、作り直します。
+**NAS 側のプログラム**: 新しいファイルで上書きしてから（`docker/data` は消さないこと）、作り直します。
 
 ```bash
 docker compose -f docker/compose.yml up -d --build
 ```
+
+**壁の ESP32**: 取り外さずにネットワーク越しに書き換えられます。操作画面の「メンテナンス（ESP32）」から
+`cattoy_esp32.ino.bin` を選ぶか、次のコマンドで行います（詳しくは [firmware/README.md](../firmware/README.md)）。
+
+```bash
+cp ~/cattoy_esp32.ino.bin docker/data/
+docker compose -f docker/compose.yml run --rm cattoy esp32-update /data/cattoy_esp32.ino.bin
+docker compose -f docker/compose.yml run --rm cattoy esp32-status     # 版を確認
+```
+
+本番のコンテナは動かしたままで構いません（書き換え中は ESP32 が指令を受け付けず、再起動後に自動でつなぎ直します）。
 
 ## うまくいかないとき
 

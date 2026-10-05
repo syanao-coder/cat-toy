@@ -221,11 +221,27 @@ def run(cfg: Config, web_port: int | None = None, stop: threading.Event | None =
                 "esp32": esp,
             }
 
+        def maintenance_actions() -> dict:
+            """操作画面から ESP32 のファームウェアを書き換え・再起動する（ESP32 構成のときだけ）。"""
+            if getattr(pantilt, "link", None) is None:
+                return {}
+            from . import firmware
+
+            def update(body: bytes) -> dict:
+                log.info("操作画面からファームウェアの書き換えを受け付けました（%d バイト）", len(body))
+                return {"ok": True, **firmware.upload_firmware(cfg.esp32, body)}
+
+            def reboot(_: bytes) -> dict:
+                firmware.reboot(cfg.esp32)
+                return {"ok": True}
+
+            return {"/api/esp32/firmware": update, "/api/esp32/reboot": reboot}
+
         port = web_port if web_port is not None else cfg.runtime.web_port
         if port:
             from .preview import PreviewServer
 
-            preview = PreviewServer(port, status=status, set_enabled=store.set_enabled)
+            preview = PreviewServer(port, status=status, set_enabled=store.set_enabled, actions=maintenance_actions())
 
         def vision_mode(now: float) -> str:
             if not store.enabled or not active_now() or behavior.mode is Mode.COOLDOWN:
