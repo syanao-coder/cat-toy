@@ -1,0 +1,154 @@
+"""コマンドライン: `cattoy <サブコマンド> [--config config.toml]`"""
+
+from __future__ import annotations
+
+import argparse
+import logging
+import time
+from pathlib import Path
+
+from .config import Config, load_config
+
+
+def _cmd_run(cfg: Config, args: argparse.Namespace) -> None:
+    from .app import run
+
+    run(cfg, args.web)
+
+
+def _cmd_calibrate(cfg: Config, args: argparse.Namespace) -> None:
+    from .calibrate import run_calibration
+
+    print("レーザーが部屋中を照らします。猫と人がいないことを確認してください。")
+    if not args.yes and input("開始しますか? [y/N] ").strip().lower() != "y":
+        return
+    run_calibration(cfg, args.web)
+
+
+def _cmd_hw_test(cfg: Config, args: argparse.Namespace) -> None:
+    """配線確認: レーザーの点滅と、サーボを可動範囲の端まで動かす。"""
+    from .hardware import make_laser, make_pantilt
+
+    laser = make_laser(cfg.laser)
+    pantilt = make_pantilt(cfg.servo)
+    s = cfg.servo
+    try:
+        print("レーザーを 3 回点滅します")
+        for _ in range(3):
+            laser.on()
+            time.sleep(0.3)
+            laser.off()
+            time.sleep(0.3)
+        steps = [
+            ("ホーム", s.pan_home, s.tilt_home),
+            ("パン最小", s.pan_min, s.tilt_home),
+            ("パン最大", s.pan_max, s.tilt_home),
+            ("ホーム", s.pan_home, s.tilt_home),
+            ("チルト最小", s.pan_home, s.tilt_min),
+            ("チルト最大", s.pan_home, s.tilt_max),
+            ("ホーム", s.pan_home, s.tilt_home),
+        ]
+        for name, pan, tilt in steps:
+            print(f"{name}: pan={pan:.0f} tilt={tilt:.0f}")
+            pantilt.move(pan, tilt)
+            laser.set(args.laser)
+            time.sleep(1.5)
+    finally:
+        laser.close()
+        pantilt.close()
+
+
+def _cmd_aim(cfg: Config, args: argparse.Namespace) -> None:
+    """指定した角度・または画像上の位置を照らす（可動範囲の確認やキャリブレーションの検証用）。"""
+    from .hardware import make_laser, make_pantilt
+
+    if args.point:
+        from .app import load_calibration
+
+        cal = load_calibration(cfg, (cfg.camera.width, cfg.camera.height))
+        x, y = args.point
+        pan, tilt = cal.pixel_to_angles(x * cfg.camera.width, y * cfg.camera.height)
+    elif args.angles:
+        pan, tilt = args.angles
+    else:
+        pan, tilt = cfg.servo.pan_home, cfg.servo.tilt_home
+    laser = make_laser(cfg.laser)
+    pantilt = make_pantilt(cfg.servo)
+    try:
+        pantilt.move(pan, tilt)
+        print(f"pan={pantilt.pan:.1f} tilt={pantilt.tilt:.1f} を {args.seconds:.0f} 秒照らします")
+        time.sleep(0.5)
+        laser.on()
+        time.sleep(args.seconds)
+    finally:
+        laser.close()
+        pantilt.close()
+
+
+def _cmd_snapshot(cfg: Config, args: argparse.Namespace) -> None:
+    """カメラ画像に 0.1 刻みの目盛りを描いて保存する（play_area の座標を読み取る用）。"""
+    import cv2
+
+    from .hardware import make_camera
+
+    camera = make_camera(cfg.camera)
+    try:
+        img = camera.read_fresh().copy()
+    finally:
+        camera.close()
+    h, w = img.shape[:2]
+    for k in range(1, 10):
+        x, y = int(w * k / 10), int(h * k / 10)
+        cv2.line(img, (x, 0), (x, h), (200, 200, 200), 1)
+        cv2.line(img, (0, y), (w, y), (200, 200, 200), 1)
+        cv2.putText(img, f"{k / 10:.1f}", (x + 2, 12), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 255), 1)
+        cv2.putText(img, f"{k / 10:.1f}", (2, y - 2), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 255), 1)
+    cv2.imwrite(args.output, img)
+    print(f"保存しました: {args.output}")
+
+
+def main(argv: list[str] | None = None) -> None:
+    p = argparse.ArgumentParser(prog="cattoy", description="猫を見つけてレーザーで遊ぶ自動おもちゃ")
+    p.add_argument("-c", "--config", default="config.toml", help="設定ファイル（既定: config.toml）")
+    p.add_argument("-v", "--verbose", action="store_true", help="詳細なログを出す")
+    sub = p.add_subparsers(dest="command", required=True)
+
+    sp = sub.add_parser("run", help="遊ばせる（本番）")
+    sp.add_argument("--web", type=int, default=None, metavar="PORT", help="ブラウザでプレビューを見る（例: 8080）")
+    sp.set_defaults(func=_cmd_run)
+
+    sp = sub.add_parser("calibrate", help="カメラとサーボの対応付けを自動で測る")
+    sp.add_argument("--web", type=int, default=None, metavar="PORT")
+    sp.add_argument("-y", "--yes", action="store_true", help="確認せずに開始する")
+    sp.set_defaults(func=_cmd_calibrate)
+
+    sp = sub.add_parser("hw-test", help="レーザーとサーボの配線確認")
+    sp.add_argument("--laser", action="store_true", help="サーボを動かす間レーザーを点灯する")
+    sp.set_defaults(func=_cmd_hw_test)
+
+    sp = sub.add_parser("aim", help="指定した場所を照らす")
+    g = sp.add_mutually_exclusive_group()
+    g.add_argument("--angles", type=float, nargs=2, metavar=("PAN", "TILT"), help="サーボ角度（度）")
+    g.add_argument("--point", type=float, nargs=2, metavar=("X", "Y"), help="画像上の位置（0〜1）。要キャリブレーション")
+    sp.add_argument("--seconds", type=float, default=5.0)
+    sp.set_defaults(func=_cmd_aim)
+
+    sp = sub.add_parser("snapshot", help="目盛り付きのカメラ画像を保存する")
+    sp.add_argument("-o", "--output", default="snapshot.jpg")
+    sp.set_defaults(func=_cmd_snapshot)
+
+    args = p.parse_args(argv)
+    logging.basicConfig(
+        level=logging.DEBUG if args.verbose else logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
+    if Path(args.config).exists():
+        cfg = load_config(args.config)
+    else:
+        logging.warning("%s がないため既定値で動かします", args.config)
+        cfg = Config()
+    args.func(cfg, args)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,180 @@
+"""設定ファイル（TOML）の読み込み。
+
+すべての項目に既定値があり、config.toml には変更したい項目だけを書けばよい。
+"""
+
+from __future__ import annotations
+
+import dataclasses
+import datetime as _dt
+import tomllib
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+
+@dataclass
+class CameraConfig:
+    backend: str = "picamera2"  # "picamera2" | "opencv"
+    device: str | int = 0  # opencv のときのデバイス番号 or 動画ファイル
+    width: int = 640
+    height: int = 480
+    hflip: bool = False
+    vflip: bool = False
+
+
+@dataclass
+class DetectorConfig:
+    model_path: str = "models/yolo11n.onnx"
+    input_size: int = 320
+    conf_threshold: float = 0.35
+    iou_threshold: float = 0.45
+    threads: int = 4
+
+
+@dataclass
+class ServoConfig:
+    backend: str = "pca9685"  # "pca9685" | "gpio" | "mock"
+    pan_channel: int = 0  # PCA9685 のチャンネル
+    tilt_channel: int = 1
+    pan_gpio: int = 12  # backend="gpio" のときの GPIO 番号 (BCM)
+    tilt_gpio: int = 13
+    pan_min: float = 30.0  # 可動範囲（度）。ハードウェアテストで確認して狭める
+    pan_max: float = 150.0
+    tilt_min: float = 30.0
+    tilt_max: float = 150.0
+    pan_home: float = 90.0
+    tilt_home: float = 90.0
+    min_pulse_us: int = 500
+    max_pulse_us: int = 2500
+    actuation_range: float = 180.0
+    release_after_s: float = 3.0  # レーザー消灯が続いたらサーボの保持を解除（ジッタ・発熱対策）
+
+
+@dataclass
+class LaserConfig:
+    backend: str = "gpio"  # "gpio" | "mock"
+    gpio: int = 17
+    active_high: bool = True
+    max_on_s: float = 900.0  # 連続点灯の上限（安全装置）
+
+
+@dataclass
+class CalibrationConfig:
+    path: str = "calibration.json"
+    grid: int = 9  # パン・チルトそれぞれの格子点数（9×9=81 点で約 2 分）
+    settle_s: float = 0.5  # サーボ移動後の待ち時間
+    poly_degree: int = 5  # 点が少ないときは自動で下げる
+    min_dot_intensity: int = 60  # レーザー点灯・消灯の差分の最小値（0〜765）
+
+
+@dataclass
+class PlayConfig:
+    # --- セッション ---
+    session_max_s: float = 600.0  # 1回の遊びの最大時間
+    cooldown_s: float = 1800.0  # 遊んだ後の休憩時間
+    start_delay_s: float = 1.5  # 猫がこの秒数見え続けたら開始（誤検出対策）
+    lost_timeout_s: float = 4.0  # 猫を見失ってこの秒数でレーザー停止
+    reset_after_s: float = 300.0  # 猫がこの秒数いなければ遊んだ時間をリセット
+    active_hours: str = "07:00-23:00"  # 動作する時間帯。空文字なら常時
+    person_safety: bool = True  # 人を検出している間はレーザー消灯
+
+    # --- 距離（猫の体長を 1 とした倍率）---
+    keepout_margin: float = 0.35  # 猫の外接矩形をこれだけ広げた範囲にはレーザーを当てない
+    lead_distance: float = 1.6  # 走っている猫の前方どれだけ先に置くか
+    lure_distance: float = 2.0  # 止まっている猫の前方どれだけ先で誘うか
+    dart_distance: float = 3.0  # 素早く逃げるときの距離
+    wiggle_amplitude: float = 0.25  # その場でちょろちょろ動く振幅
+
+    # --- 速さ（体長/秒）---
+    creep_speed: float = 0.8
+    move_speed: float = 2.5
+    dart_speed: float = 7.0
+    chase_threshold: float = 0.8  # 猫がこれ以上の速さなら「追いかけ中」とみなす
+    flee_probability: float = 0.7  # 猫が飛びかかってきたとき逃げる確率（残りはわざと捕まえさせる）
+
+    # --- 領域（画像サイズで正規化した 0〜1 の座標）---
+    play_area: list[list[float]] = field(default_factory=list)  # 空ならキャリブレーション範囲から自動
+    finish_point: list[float] = field(default_factory=list)  # 終了時にここへ誘導（おもちゃ・おやつの場所など）
+
+
+@dataclass
+class RuntimeConfig:
+    control_hz: float = 50.0
+    web_port: int = 0  # 0 ならプレビュー無効
+
+
+@dataclass
+class Config:
+    camera: CameraConfig = field(default_factory=CameraConfig)
+    detector: DetectorConfig = field(default_factory=DetectorConfig)
+    servo: ServoConfig = field(default_factory=ServoConfig)
+    laser: LaserConfig = field(default_factory=LaserConfig)
+    calibration: CalibrationConfig = field(default_factory=CalibrationConfig)
+    play: PlayConfig = field(default_factory=PlayConfig)
+    runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
+    base_dir: Path = field(default_factory=Path.cwd)
+
+    def resolve(self, path: str) -> Path:
+        """設定ファイルからの相対パスを解決する。"""
+        p = Path(path).expanduser()
+        return p if p.is_absolute() else self.base_dir / p
+
+
+_SECTIONS: dict[str, type] = {
+    "camera": CameraConfig,
+    "detector": DetectorConfig,
+    "servo": ServoConfig,
+    "laser": LaserConfig,
+    "calibration": CalibrationConfig,
+    "play": PlayConfig,
+    "runtime": RuntimeConfig,
+}
+
+
+def _fill(cls: type, data: dict[str, Any], section: str) -> Any:
+    names = {f.name for f in dataclasses.fields(cls)}
+    unknown = set(data) - names
+    if unknown:
+        raise ValueError(f"[{section}] に不明な設定項目があります: {', '.join(sorted(unknown))}")
+    return cls(**data)
+
+
+def load_config(path: str | Path | None) -> Config:
+    if path is None:
+        return Config()
+    path = Path(path)
+    with path.open("rb") as f:
+        raw = tomllib.load(f)
+    kwargs: dict[str, Any] = {}
+    for key, value in raw.items():
+        if key not in _SECTIONS:
+            raise ValueError(f"不明なセクションです: [{key}]")
+        kwargs[key] = _fill(_SECTIONS[key], value, key)
+    cfg = Config(**kwargs, base_dir=path.resolve().parent)
+    parse_active_hours(cfg.play.active_hours)  # 書式チェック
+    return cfg
+
+
+def parse_active_hours(spec: str) -> tuple[_dt.time, _dt.time] | None:
+    """"07:00-23:00" 形式を解析する。空文字なら None（常時動作）。"""
+    spec = spec.strip()
+    if not spec:
+        return None
+    try:
+        start_s, end_s = spec.split("-")
+        start = _dt.time.fromisoformat(start_s.strip())
+        end = _dt.time.fromisoformat(end_s.strip())
+    except ValueError as e:
+        raise ValueError(f"active_hours の書式が不正です（例: \"07:00-23:00\"）: {spec!r}") from e
+    return start, end
+
+
+def is_active_time(spec: str, now: _dt.time) -> bool:
+    hours = parse_active_hours(spec)
+    if hours is None:
+        return True
+    start, end = hours
+    if start <= end:
+        return start <= now < end
+    return now >= start or now < end  # 日をまたぐ指定（例: 22:00-02:00）

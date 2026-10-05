@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cattoy"
+version = "0.1.0"
+description = "猫を見つけてレーザーで遊ぶ自動おもちゃ（Raspberry Pi 用）"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = ["numpy"]
+
+[project.optional-dependencies]
+# Raspberry Pi では OpenCV・picamera2・gpiozero は apt で入れる（README 参照）
+pi = ["onnxruntime", "adafruit-circuitpython-servokit"]
+# PC で試すとき
+desktop = ["onnxruntime", "opencv-python-headless"]
+dev = ["pytest", "opencv-python-headless"]
+
+[project.scripts]
+cattoy = "cattoy.cli:main"
+
+[tool.setuptools]
+packages = ["cattoy"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
