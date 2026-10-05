@@ -78,6 +78,7 @@ class Calibration:
     points: list[tuple[float, float, float, float]] = field(default_factory=list)  # (x, y, pan, tilt)
     rms_px: float = 0.0
     rms_deg: float = 0.0
+    latency_s: float = 0.0  # レーザーを点けてからカメラ画像に写るまでの遅れ（映像の遅れの目安）
 
     def pixel_to_angles(self, x: float, y: float) -> tuple[float, float]:
         return self.pix_to_servo(x, y)
@@ -154,6 +155,7 @@ class Calibration:
             "points": [list(p) for p in self.points],
             "rms_px": self.rms_px,
             "rms_deg": self.rms_deg,
+            "latency_s": self.latency_s,
         }
         Path(path).write_text(json.dumps(data, indent=1), encoding="utf-8")
 
@@ -167,6 +169,7 @@ class Calibration:
             points=[tuple(p) for p in d.get("points", [])],
             rms_px=float(d.get("rms_px", 0.0)),
             rms_deg=float(d.get("rms_deg", 0.0)),
+            latency_s=float(d.get("latency_s", 0.0)),
         )
 
 

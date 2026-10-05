@@ -2,6 +2,7 @@
 
 実機用の実装と、PC での動作確認用のモック実装を持つ。
 実機用ライブラリ（picamera2, adafruit_servokit, gpiozero）は使うときにだけ import する。
+カメラ付き ESP32 をネットワーク越しに使う実装は esp32.py にある。
 """
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .config import CameraConfig, LaserConfig, ServoConfig
+from .config import CameraConfig, Esp32Config, LaserConfig, ServoConfig
 
 log = logging.getLogger(__name__)
 
@@ -26,6 +27,14 @@ class Camera:
     def read(self) -> np.ndarray:
         """最新のフレーム（BGR）を返す。"""
         raise NotImplementedError
+
+    def read_with_time(self) -> tuple[np.ndarray, float]:
+        """フレームと、それを受け取った時刻（time.monotonic）を返す。"""
+        frame = self.read()
+        return frame, time.monotonic()
+
+    def set_streaming(self, on: bool) -> None:
+        """連続取得の ON/OFF（ネットワークカメラで通信と負荷を減らすため）。既定では何もしない。"""
 
     def read_fresh(self) -> np.ndarray:
         """バッファに溜まった古いフレームを捨てて、今の様子を写したフレームを返す。"""
@@ -98,7 +107,11 @@ class OpenCVCamera(Camera):
         self.cap.release()
 
 
-def make_camera(cfg: CameraConfig) -> Camera:
+def make_camera(cfg: CameraConfig, esp32: Esp32Config | None = None) -> Camera:
+    if cfg.backend == "esp32":
+        from .esp32 import Esp32Camera
+
+        return Esp32Camera(cfg, esp32 or Esp32Config())
     if cfg.backend == "picamera2":
         return Picamera2Camera(cfg)
     if cfg.backend == "opencv":
@@ -204,7 +217,11 @@ class MockPanTilt(PanTilt):
         log.debug("servo pan=%.1f tilt=%.1f", pan, tilt)
 
 
-def make_pantilt(cfg: ServoConfig) -> PanTilt:
+def make_pantilt(cfg: ServoConfig, esp32: Esp32Config | None = None) -> PanTilt:
+    if cfg.backend == "esp32":
+        from .esp32 import Esp32PanTilt
+
+        return Esp32PanTilt(cfg, esp32 or Esp32Config())
     if cfg.backend == "pca9685":
         return Pca9685PanTilt(cfg)
     if cfg.backend == "gpio":
@@ -271,7 +288,11 @@ class MockLaser(Laser):
         log.debug("laser %s", "ON" if on else "OFF")
 
 
-def make_laser(cfg: LaserConfig) -> Laser:
+def make_laser(cfg: LaserConfig, esp32: Esp32Config | None = None) -> Laser:
+    if cfg.backend == "esp32":
+        from .esp32 import Esp32Laser
+
+        return Esp32Laser(cfg, esp32 or Esp32Config())
     if cfg.backend == "gpio":
         return GpioLaser(cfg)
     if cfg.backend == "mock":

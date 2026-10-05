@@ -29,10 +29,17 @@ def _cmd_hw_test(cfg: Config, args: argparse.Namespace) -> None:
     """配線確認: レーザーの点滅と、サーボを可動範囲の端まで動かす。"""
     from .hardware import make_laser, make_pantilt
 
-    laser = make_laser(cfg.laser)
-    pantilt = make_pantilt(cfg.servo)
+    laser = make_laser(cfg.laser, cfg.esp32)
+    pantilt = make_pantilt(cfg.servo, cfg.esp32)
     s = cfg.servo
     try:
+        link = getattr(pantilt, "link", None)
+        if link is not None:
+            st = link.status()
+            if st is None:
+                print(f"ESP32（{cfg.esp32.host}）から応答がありません。電源・Wi-Fi・IP アドレスを確認してください")
+            else:
+                print(f"ESP32 に接続しました: {st}")
         print("レーザーを 3 回点滅します")
         for _ in range(3):
             laser.on()
@@ -72,8 +79,8 @@ def _cmd_aim(cfg: Config, args: argparse.Namespace) -> None:
         pan, tilt = args.angles
     else:
         pan, tilt = cfg.servo.pan_home, cfg.servo.tilt_home
-    laser = make_laser(cfg.laser)
-    pantilt = make_pantilt(cfg.servo)
+    laser = make_laser(cfg.laser, cfg.esp32)
+    pantilt = make_pantilt(cfg.servo, cfg.esp32)
     try:
         pantilt.move(pan, tilt)
         print(f"pan={pantilt.pan:.1f} tilt={pantilt.tilt:.1f} を {args.seconds:.0f} 秒照らします")
@@ -91,7 +98,7 @@ def _cmd_snapshot(cfg: Config, args: argparse.Namespace) -> None:
 
     from .hardware import make_camera
 
-    camera = make_camera(cfg.camera)
+    camera = make_camera(cfg.camera, cfg.esp32)
     try:
         img = camera.read_fresh().copy()
     finally:

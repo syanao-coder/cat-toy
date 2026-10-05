@@ -1,0 +1,31 @@
+# QNAP Container Station（または docker compose）用。
+#   起動:   docker compose -f docker/compose.yml up -d --build
+#   ログ:   docker compose -f docker/compose.yml logs -f
+#   停止:   docker compose -f docker/compose.yml down
+# 詳しくは docs/nas.md を参照。
+
+services:
+  cattoy:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.gpu   # GPU を使わないなら docker/Dockerfile.cpu
+    image: cattoy:gpu
+    container_name: cattoy
+    restart: unless-stopped
+    ports:
+      - "8090:8080"                       # スマホ用の操作画面（NAS の 8080 は QTS の管理画面が使うので 8090 で公開）
+    volumes:
+      - ./data:/data                      # config.toml・calibration.json・models/・state.json
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    deploy:
+      resources:
+        limits:
+          cpus: "2"                       # 念のため CPU の使用量に上限を付ける
+          memory: 2g
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

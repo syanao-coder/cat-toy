@@ -1,16 +1,20 @@
 """YOLO（ONNX 形式）による猫・人の検出。
 
 Ultralytics の YOLOv8 / YOLO11 を ONNX に書き出したモデルを onnxruntime で動かす。
+onnxruntime-gpu が入っていて GPU（CUDA）が使えれば GPU で、そうでなければ CPU で実行する。
 COCO データセットで学習済みのモデルがそのまま使える（cat = 15, person = 0）。
 """
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import numpy as np
 
 from .tracker import Detection
+
+log = logging.getLogger(__name__)
 
 COCO_LABELS = {0: "person", 15: "cat"}
 
@@ -82,8 +86,27 @@ def decode_yolo(
     return out
 
 
+def choose_providers(available: list[str], device: str) -> list[str]:
+    """onnxruntime の実行先を選ぶ。GPU が使えなければ CPU にする。"""
+    if device not in ("auto", "cuda", "cpu"):
+        raise ValueError(f"detector.device が不正です: {device}（auto / cuda / cpu）")
+    if device != "cpu" and "CUDAExecutionProvider" in available:
+        return ["CUDAExecutionProvider", "CPUExecutionProvider"]
+    if device == "cuda":
+        log.warning("GPU（CUDA）が使えないため CPU で認識します。コンテナに GPU が割り当てられているか確認してください")
+    return ["CPUExecutionProvider"]
+
+
 class YoloOnnxDetector:
-    def __init__(self, model_path: str | Path, input_size: int = 320, conf_threshold: float = 0.35, iou_threshold: float = 0.45, threads: int = 4):
+    def __init__(
+        self,
+        model_path: str | Path,
+        input_size: int = 320,
+        conf_threshold: float = 0.35,
+        iou_threshold: float = 0.45,
+        threads: int = 4,
+        device: str = "auto",
+    ):
         import onnxruntime as ort
 
         if not Path(model_path).exists():
@@ -93,13 +116,18 @@ class YoloOnnxDetector:
             )
         opts = ort.SessionOptions()
         opts.intra_op_num_threads = threads
-        self.session = ort.InferenceSession(str(model_path), opts, providers=["CPUExecutionProvider"])
+        providers = choose_providers(ort.get_available_providers(), device)
+        self.session = ort.InferenceSession(str(model_path), opts, providers=providers)
+        # GPU の読み込みに失敗すると onnxruntime は黙って CPU に切り替えるので、実際に使われた方を記録する
+        self.provider = "GPU" if self.session.get_providers()[0] == "CUDAExecutionProvider" else "CPU"
         inp = self.session.get_inputs()[0]
         self.input_name = inp.name
         shape = inp.shape
         self.input_size = shape[2] if isinstance(shape[2], int) else input_size
         self.conf_threshold = conf_threshold
         self.iou_threshold = iou_threshold
+        self.detect(np.zeros((self.input_size, self.input_size, 3), np.uint8))  # 初回は準備に時間がかかるので先に済ませる
+        log.info("検出モデルを読み込みました（%s で実行）", self.provider)
 
     def detect(self, bgr: np.ndarray) -> list[Detection]:
         img, scale, pad = letterbox(bgr, self.input_size)

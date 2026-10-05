@@ -1,14 +1,18 @@
 # cat-toy — 猫を見つけて、その前方をレーザーで照らす自動おもちゃ
 
-壁の高い位置や天井付近に取り付けたカメラで猫を見つけ、パン・チルトのサーボで動かすレーザーを
-**猫の少し前方**に照らして遊ばせます。Raspberry Pi 1 台で完結し、ネットワークやクラウドは不要です（スタンドアロン動作）。
+壁の高い位置に取り付けたカメラで猫を見つけ、パン・チルトのサーボで動かすレーザーを**猫の少し前方**に照らして遊ばせます。
+猫の認識は常時起動している **NAS のコンテナ**（GPU 対応）で行い、壁に付けるのは安価な**カメラ付き ESP32** だけです。
+スマホのホーム画面に追加できる操作画面から ON/OFF できます。
 
 ```
- カメラ ──► Raspberry Pi ───────────────────────────────► PCA9685 ──► パン・チルト ──► レーザー
-            ① YOLO で猫・人を検出（約 10 fps）
-            ② 猫の位置と速度を推定（検出の合間も外挿）
-            ③ 遊び方を決める（50 Hz）: 走る猫の前を逃げる / 止まった猫の前でちょろちょろ動く / …
-            ④ 画像上の狙いをサーボの角度に変換（自動キャリブレーションで求めた対応表）
+ 壁の上（部品代 5 千円前後）                              NAS（QNAP Container Station など）
+┌────────────────────────────┐   映像（Wi-Fi）   ┌────────────────────────────────────┐
+│ カメラ付き ESP32-S3         │ ───────────────► │ ① YOLO で猫・人を検出（GPU）          │
+│  ├ カメラ（固定・部屋全体） │                  │ ② 猫の位置と速度を推定（遅れも補正）   │
+│  └ パン・チルト＋レーザー   │ ◄─────────────── │ ③ 遊び方を決める（50 Hz）             │
+└────────────────────────────┘   狙い・点灯       │ ④ 画像上の狙い → サーボの角度         │
+                                                  │ ⑤ スマホ用の操作画面                  │
+                                                  └────────────────────────────────────┘
 ```
 
 ## 特徴
@@ -17,10 +21,11 @@
 - **獲物らしい動き**: 前を逃げる・素早く逃げて止まる・ちょろちょろ動く・一瞬隠れて別の場所に現れる、を組み合わせる。
   飛びかかってきたら基本は逃げるが、ときどきわざと捕まえさせる。
 - **安全装置**: 猫の体の周り（目を含む）には照射しない／人が写っている間は消灯／遊ぶ範囲を床の指定範囲に限定／
-  1 回の遊びは 10 分まで → 30 分休憩／動作時間帯の指定／連続点灯時間の上限。
-- **自動キャリブレーション**: レーザーを格子状に点滅させてカメラで位置を測り、「画像の位置 → サーボ角度」を自動で求める。
-  取り付けの向きや精度は問わない。
-- **ブラウザでプレビュー**: スマホや PC から検出結果と狙いの位置を確認でき、画像をクリックして遊ぶ範囲を設定できる。
+  1 回の遊びは 10 分まで → 30 分休憩／動作時間帯の指定／連続点灯時間の上限／
+  通信が 0.3 秒途絶えたら ESP32 が自分でレーザーを消す。
+- **自動キャリブレーション**: レーザーを格子状に点滅させてカメラで位置を測り、「画像の位置 → サーボ角度」と映像の遅れを自動で求める。
+- **スマホで操作**: ON/OFF・状態・今日遊んだ時間・ライブ映像。ESP32 の BOOT ボタンでも ON/OFF できる。
+- **NAS に優しい**: OFF・休憩中は認識を止め、猫がいない間は 1 秒に 1 回だけ確認する。認識は GPU（なければ自動で CPU）。
 
 ## ⚠️ 安全について（必ずお読みください）
 
@@ -32,82 +37,29 @@
 - レーザー遊びは「捕まえられない」ことで猫がストレスを溜めることがあると言われます。
   `finish_point` に本物のおもちゃやおやつを置き、最後はそこで「捕まえて」終われるようにするのがおすすめです。
 
-## 必要なもの
+## 作り方
 
-詳しくは **[docs/hardware.md](docs/hardware.md)**（部品・配線図・設置方法）を参照してください。
+| 手順 | 内容 | 説明 |
+| --- | --- | --- |
+| 1. 部品をそろえて組み立てる | ESP32-S3 CAM・OV2640 120°・MG90S ×2・パン・チルト台・1mW レーザーなど | [docs/hardware.md](docs/hardware.md) |
+| 2. ESP32 に書き込む | Arduino IDE で `firmware/cattoy_esp32` を書き込む | [firmware/README.md](firmware/README.md) |
+| 3. NAS にコンテナを作る | 検出モデルの準備・コンテナの作成 | [docs/nas.md](docs/nas.md) |
+| 4. 調整する | 配線確認 → 可動範囲の調整 → キャリブレーション | [docs/nas.md](docs/nas.md) の 5 |
+| 5. スマホから使う | `http://<NAS の IP>:8090/` をホーム画面に追加 | [docs/nas.md](docs/nas.md) の 6 |
 
-- Raspberry Pi 5（Pi 4 でも可）／ Camera Module 3 Wide
-- パン・チルト台 ＋ サーボ MG90S ×2 ／ サーボドライバ PCA9685
-- レーザーモジュール（1mW 以下）＋ トランジスタ 2SC1815 ＋ 1kΩ
-- Pi 用電源 ＋ サーボ用 5V 2A 電源
+NAS がない場合は、Raspberry Pi 1 台で完結させる構成でも動きます（[docs/raspberry-pi.md](docs/raspberry-pi.md)）。
 
-## セットアップ（Raspberry Pi OS Bookworm）
+## コマンド
 
-```bash
-sudo apt update
-sudo apt install -y git python3-venv python3-opencv python3-picamera2 python3-gpiozero i2c-tools
-sudo raspi-config nonint do_i2c 0        # I2C を有効化（PCA9685 用）
+| コマンド | 内容 |
+| --- | --- |
+| `cattoy run` | 遊ばせる（本番）。操作画面も出す |
+| `cattoy calibrate [-y] [--web PORT]` | カメラとサーボの対応付けと映像の遅れを自動で測る（猫と人がいない状態で） |
+| `cattoy hw-test [--laser]` | 配線確認（レーザーの点滅とサーボを可動範囲の端まで動かす） |
+| `cattoy aim --angles PAN TILT` / `--point X Y` | 指定した角度・画像上の位置を照らす |
+| `cattoy snapshot` | 目盛り付きのカメラ画像を保存する |
 
-git clone https://github.com/syanao-coder/cat-toy.git
-cd cat-toy
-python3 -m venv --system-site-packages .venv   # apt で入れた picamera2 / OpenCV を使うため
-.venv/bin/pip install -e '.[pi]'
-cp config.example.toml config.toml
-```
-
-以降のコマンドは `cat-toy` ディレクトリで実行します（`.venv/bin/cattoy` を `cattoy` と略記）。
-
-### 検出モデルの準備
-
-COCO で学習済みの YOLO（猫と人を検出できる）を ONNX 形式に書き出して使います。PC でも Pi でも作れます。
-
-```bash
-pip install ultralytics
-yolo export model=yolo11n.pt format=onnx imgsz=320
-# できた yolo11n.onnx を cat-toy/models/ に置く
-```
-
-> Ultralytics のモデルは AGPL-3.0 ライセンスです。個人で使う分には問題ありません。
-
-## 初回の調整手順
-
-1. **配線の確認**
-   ```bash
-   cattoy hw-test --laser
-   ```
-   レーザーが点滅し、サーボが可動範囲の端まで動きます。`cattoy aim --angles 90 60` で好きな角度を照らせるので、
-   **レーザーが床の遊ばせたい範囲だけに当たるように** `config.toml` の `pan_min` 〜 `tilt_max` を狭めてください。
-
-2. **キャリブレーション**（猫と人がいない状態で。約 2 分）
-   ```bash
-   cattoy calibrate --web 8080
-   ```
-   レーザーを 81 か所で点滅させ、カメラで位置を測ります。終わると `calibration.json` と確認用の `calibration.jpg` ができ、
-   誤差が表示されます（目安: 3px 以下）。部屋を明るさの変わらない状態にしておくと失敗しにくいです。
-
-3. **確認**
-   ```bash
-   cattoy aim --point 0.5 0.7     # 画像の横 50%・縦 70% の位置を照らす
-   ```
-
-4. **遊ぶ範囲の設定（任意）**
-   ```bash
-   cattoy run --web 8080
-   ```
-   スマホや PC のブラウザで `http://<ラズパイの名前>.local:8080/` を開くと、カメラ映像に検出結果
-   （緑=猫、赤=人、黄=照射禁止範囲、赤丸=レーザーの狙い）が重ねて表示されます。
-   画像をクリックすると座標が表示されるので、`config.toml` の `play_area` / `finish_point` に貼り付けます。
-   指定しない場合は、キャリブレーションでレーザーが写った範囲を少し狭めたものを使います。
-
-5. **自動起動**
-   ```bash
-   # systemd/cattoy.service の User とパスを自分の環境に合わせてから
-   sudo cp systemd/cattoy.service /etc/systemd/system/
-   sudo systemctl daemon-reload
-   sudo systemctl enable --now cattoy
-   journalctl -u cattoy -f      # ログを見る
-   ```
-   電源を入れるだけで起動し、猫が来ると遊び始めます。
+コンテナでは `docker compose -f docker/compose.yml run --rm cattoy <コマンド>` で実行します。
 
 ## 遊び方の調整
 
@@ -144,7 +96,7 @@ backend = "mock"
 [play]
 active_hours = ""
 EOF
-cattoy run --web 8080      # http://localhost:8080/ を開く
+cattoy run      # http://localhost:8080/ を開く（検出モデルは docs/nas.md の 3 と同じ方法で用意）
 ```
 
 ## 開発
@@ -154,24 +106,29 @@ pip install -e '.[dev]'
 pytest
 ```
 
-テストでは、レーザー点を追いかける仮想の猫を使って「点灯中は必ず猫から離れた位置・遊ぶ範囲の中を照らしている」ことや、
-仮想の部屋（壁掛けのパン・チルト＋広角カメラ）で自動キャリブレーションの精度を確認しています。
+テストでは次のことを確認しています。
+- レーザー点を追いかける仮想の猫で、点灯中は必ず猫から離れた位置・遊ぶ範囲の中を照らしていること
+- 仮想の部屋（壁掛けのパン・チルト＋広角カメラ）での自動キャリブレーションの精度と、映像の遅れの測定
+- ESP32 との通信（ローカルの UDP / HTTP サーバー相手）、本物の onnxruntime での検出
+- 本体ループの ON/OFF・待機中の認識間隔・操作画面の API
 
 | ファイル | 役割 |
 | --- | --- |
-| `cattoy/app.py` | 本体ループ（映像スレッド＋50 Hz の制御ループ） |
+| `cattoy/app.py` | 本体ループ（映像スレッド＋50 Hz の制御ループ、ON/OFF、負荷の段階切り替え） |
 | `cattoy/behavior.py` | 遊び方のステートマシン（狙いの位置・点灯の判断、安全装置） |
 | `cattoy/tracker.py` | 猫の追跡（位置・速度の推定と外挿） |
-| `cattoy/detector.py` | YOLO（ONNX）による猫・人の検出 |
+| `cattoy/detector.py` | YOLO（ONNX）による猫・人の検出（GPU / CPU） |
 | `cattoy/calibration.py` | 画像座標 ⇔ サーボ角度の対応付け、レーザー点の検出 |
-| `cattoy/calibrate.py` | 自動キャリブレーションの手順 |
-| `cattoy/hardware.py` | カメラ・サーボ・レーザーの制御（実機用とモック） |
-| `cattoy/preview.py` | ブラウザ用のライブプレビュー |
-| `cattoy/cli.py` | コマンド（run / calibrate / hw-test / aim / snapshot） |
+| `cattoy/calibrate.py` | 自動キャリブレーションの手順と映像の遅れの測定 |
+| `cattoy/esp32.py` | ESP32 との通信（映像の受信、サーボ・レーザーの指令） |
+| `cattoy/hardware.py` | カメラ・サーボ・レーザーの共通部分（Raspberry Pi 用とモックを含む） |
+| `cattoy/preview.py` / `webpage.py` | 操作画面とライブ映像 |
+| `cattoy/cli.py` | コマンド |
+| `firmware/cattoy_esp32/` | ESP32 のファームウェア（Arduino） |
+| `docker/` | コンテナ（GPU 版・CPU 版）と compose 設定 |
 
 ## 今後の拡張案
 
-- **Raspberry Pi AI Camera（IMX500）対応**: カメラ側で検出するので、Pi Zero 2 W でも動かせる見込み。
 - **閉ループ補正**: 遊んでいる最中もレーザー点をカメラで確かめ、狙いのずれを補正する。
-- **遊んだ記録**: 1 日に何分遊んだかをグラフにする、スマホに通知する。
+- **操作画面からのキャリブレーション**: SSH を使わずにスマホから実行できるようにする。
 - **多頭飼い対応**: 現在は 1 匹を追いかける（2 匹以上いるときは直前に追っていた猫を優先）。

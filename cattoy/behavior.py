@@ -85,6 +85,7 @@ class PlayBehavior:
         image_size: tuple[int, int],
         finish_point: Point | None = None,
         rng: random.Random | None = None,
+        latency_s: float = 0.0,
     ):
         w, h = image_size
         if len(area) < 3:
@@ -94,6 +95,7 @@ class PlayBehavior:
         self.image_size = image_size
         self.finish_point = finish_point
         self.rng = rng or random.Random()
+        self.latency_s = latency_s
         self._size_lo, self._size_hi = 0.02 * w, 0.5 * w
 
         self.mode = Mode.IDLE
@@ -178,7 +180,8 @@ class PlayBehavior:
         return self._off("セッション終了")
 
     def _in_keepout(self, p: Point, cat: CatState) -> bool:
-        m = self.cfg.keepout_margin * self.size
+        # 映像が遅れて届く分、猫の位置は先読み（外挿）しているが、その誤差を見込んで広げる
+        m = self.cfg.keepout_margin * self.size + 0.5 * cat.speed * self.latency_s
         x1, y1, x2, y2 = cat.box
         return x1 - m <= p[0] <= x2 + m and y1 - m <= p[1] <= y2 + m
 

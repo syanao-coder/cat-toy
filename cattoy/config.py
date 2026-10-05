@@ -14,8 +14,19 @@ from typing import Any
 
 
 @dataclass
+class Esp32Config:
+    """カメラ付き ESP32（firmware/cattoy_esp32）との接続。"""
+
+    host: str = ""  # ESP32 の IP アドレス（ルーターで固定しておく）
+    http_port: int = 80  # 静止画・状態
+    stream_port: int = 81  # 映像（MJPEG）
+    udp_port: int = 4210  # サーボ・レーザーの指令
+    key: str = ""  # ファームウェアの CATTOY_KEY と同じ文字列（空なら照合しない）
+
+
+@dataclass
 class CameraConfig:
-    backend: str = "picamera2"  # "picamera2" | "opencv"
+    backend: str = "esp32"  # "esp32" | "picamera2" | "opencv"
     device: str | int = 0  # opencv のときのデバイス番号 or 動画ファイル
     width: int = 640
     height: int = 480
@@ -30,11 +41,12 @@ class DetectorConfig:
     conf_threshold: float = 0.35
     iou_threshold: float = 0.45
     threads: int = 4
+    device: str = "auto"  # "auto"（GPU があれば GPU）| "cuda" | "cpu"
 
 
 @dataclass
 class ServoConfig:
-    backend: str = "pca9685"  # "pca9685" | "gpio" | "mock"
+    backend: str = "esp32"  # "esp32" | "pca9685" | "gpio" | "mock"
     pan_channel: int = 0  # PCA9685 のチャンネル
     tilt_channel: int = 1
     pan_gpio: int = 12  # backend="gpio" のときの GPIO 番号 (BCM)
@@ -53,8 +65,8 @@ class ServoConfig:
 
 @dataclass
 class LaserConfig:
-    backend: str = "gpio"  # "gpio" | "mock"
-    gpio: int = 17
+    backend: str = "esp32"  # "esp32" | "gpio" | "mock"
+    gpio: int = 17  # backend="gpio" のときの GPIO 番号 (BCM)
     active_high: bool = True
     max_on_s: float = 900.0  # 連続点灯の上限（安全装置）
 
@@ -101,11 +113,14 @@ class PlayConfig:
 @dataclass
 class RuntimeConfig:
     control_hz: float = 50.0
-    web_port: int = 0  # 0 ならプレビュー無効
+    web_port: int = 8080  # 操作画面（スマホ用）のポート。0 なら無効
+    standby_interval_s: float = 1.0  # 猫がいない間は、この間隔でだけ認識する（負荷を下げる）
+    state_path: str = "state.json"  # ON/OFF と遊んだ記録の保存先
 
 
 @dataclass
 class Config:
+    esp32: Esp32Config = field(default_factory=Esp32Config)
     camera: CameraConfig = field(default_factory=CameraConfig)
     detector: DetectorConfig = field(default_factory=DetectorConfig)
     servo: ServoConfig = field(default_factory=ServoConfig)
@@ -122,6 +137,7 @@ class Config:
 
 
 _SECTIONS: dict[str, type] = {
+    "esp32": Esp32Config,
     "camera": CameraConfig,
     "detector": DetectorConfig,
     "servo": ServoConfig,

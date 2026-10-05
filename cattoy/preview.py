@@ -1,17 +1,24 @@
-"""設置・調整用のライブプレビュー（ブラウザで http://<ラズパイのIP>:<port>/ を開く）。
+"""ブラウザ用の画面（http://<NAS や Pi の IP>:<port>/ を開く）。
 
-標準ライブラリだけで MJPEG を配信する。認証はないので家庭内 LAN でのみ使うこと。
-画像をクリックすると正規化座標（0〜1）が表示され、play_area / finish_point の設定にそのまま使える。
+- run のとき: スマホ用の操作画面（ON/OFF・状態・遊んだ時間・ライブ映像）
+- calibrate のとき: キャリブレーションの様子を見るだけのプレビュー
+
+標準ライブラリだけで動く。認証はないので家庭内 LAN でのみ使うこと。
+映像をクリックすると正規化座標（0〜1）が表示され、play_area / finish_point の設定にそのまま使える。
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Callable
 
 import numpy as np
 
+from . import webpage
 from .behavior import Command
 from .geometry import Point
 from .tracker import CatState, Detection
@@ -54,37 +61,60 @@ function show() {
 
 
 class PreviewServer:
-    def __init__(self, port: int):
+    """MJPEG のプレビューと、（status / set_enabled を渡したときは）スマホ用の操作画面を配信する。"""
+
+    def __init__(
+        self,
+        port: int,
+        status: Callable[[], dict] | None = None,
+        set_enabled: Callable[[bool], None] | None = None,
+    ):
         self._jpeg: bytes | None = None
         self._cond = threading.Condition()
+        self._viewers = 0
+        self._snapshot_at = -1e9
         server = self
 
         class Handler(BaseHTTPRequestHandler):
             def log_message(self, fmt: str, *args: object) -> None:
                 log.debug(fmt, *args)
 
+            def _send(self, code: int, ctype: str, body: bytes) -> None:
+                self.send_response(code)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(body)
+
+            def _json(self, data: object, code: int = 200) -> None:
+                self._send(code, "application/json; charset=utf-8", json.dumps(data, ensure_ascii=False).encode())
+
             def do_GET(self) -> None:
-                if self.path == "/":
-                    body = _PAGE.encode("utf-8")
-                    self.send_response(200)
-                    self.send_header("Content-Type", "text/html; charset=utf-8")
-                    self.send_header("Content-Length", str(len(body)))
-                    self.end_headers()
-                    self.wfile.write(body)
-                elif self.path == "/snapshot.jpg":
+                path = self.path.split("?")[0]
+                if path == "/":
+                    page = webpage.CONTROL_PAGE if status is not None else _PAGE
+                    self._send(200, "text/html; charset=utf-8", page.encode("utf-8"))
+                elif path == "/manifest.webmanifest" and status is not None:
+                    self._send(200, "application/manifest+json", webpage.MANIFEST.encode("utf-8"))
+                elif path == "/icon.svg":
+                    self._send(200, "image/svg+xml", webpage.ICON_SVG.encode("utf-8"))
+                elif path == "/api/status" and status is not None:
+                    self._json(status())
+                elif path == "/snapshot.jpg":
+                    server._snapshot_at = time.monotonic()
                     jpeg = server.wait_frame(timeout=3.0)
                     if jpeg is None:
                         self.send_error(503)
                         return
-                    self.send_response(200)
-                    self.send_header("Content-Type", "image/jpeg")
-                    self.send_header("Content-Length", str(len(jpeg)))
-                    self.end_headers()
-                    self.wfile.write(jpeg)
-                elif self.path == "/stream":
+                    self._send(200, "image/jpeg", jpeg)
+                elif path == "/stream":
                     self.send_response(200)
                     self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
+                    self.send_header("Cache-Control", "no-store")
                     self.end_headers()
+                    with server._cond:
+                        server._viewers += 1
                     try:
                         while True:
                             jpeg = server.wait_frame(timeout=5.0)
@@ -95,6 +125,22 @@ class PreviewServer:
                             self.wfile.write(jpeg + b"\r\n")
                     except (BrokenPipeError, ConnectionResetError):
                         pass
+                    finally:
+                        with server._cond:
+                            server._viewers -= 1
+                else:
+                    self.send_error(404)
+
+            def do_POST(self) -> None:
+                if self.path == "/api/enabled" and set_enabled is not None and status is not None:
+                    try:
+                        n = int(self.headers.get("Content-Length", "0"))
+                        body = json.loads(self.rfile.read(n) or b"{}")
+                        set_enabled(bool(body["enabled"]))
+                    except (ValueError, KeyError):
+                        self._json({"error": "enabled (true/false) を送ってください"}, 400)
+                        return
+                    self._json(status())
                 else:
                     self.send_error(404)
 
@@ -102,7 +148,12 @@ class PreviewServer:
         self.httpd.daemon_threads = True
         self._thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
         self._thread.start()
-        log.info("プレビュー: http://<このマシンのIP>:%d/", port)
+        log.info("%s: http://<このマシンのIP>:%d/", "操作画面" if status is not None else "プレビュー", port)
+
+    def has_viewers(self) -> bool:
+        """映像を見ている人がいるか（いなければ、重ね描きと JPEG 圧縮を省いて負荷を下げる）。"""
+        with self._cond:
+            return self._viewers > 0 or time.monotonic() - self._snapshot_at < 3.0
 
     def wait_frame(self, timeout: float) -> bytes | None:
         with self._cond:

@@ -9,3 +9,8 @@ calibration.jpg
 snapshot.jpg
 models/*.onnx
 models/*.pt
+firmware/cattoy_esp32/secrets.h
+state.json
+state.tmp
+docker/data/
+build/

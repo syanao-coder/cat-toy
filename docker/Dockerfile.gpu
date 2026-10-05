@@ -1,0 +1,26 @@
+# NVIDIA GPU（Quadro T400 など）で認識するコンテナ。
+# 新しい onnxruntime-gpu は CUDA 12.8 以降が必要。NAS の NVIDIA ドライバが CUDA 12.8 以上に対応していること
+# （nvidia-smi の右上の「CUDA Version」で確認できる）。
+FROM nvidia/cuda:12.8.1-cudnn-runtime-ubuntu24.04
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    TZ=Asia/Tokyo
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends python3 python3-venv tzdata \
+ && rm -rf /var/lib/apt/lists/* \
+ && python3 -m venv /opt/venv
+ENV PATH=/opt/venv/bin:$PATH
+
+WORKDIR /app
+COPY pyproject.toml README.md ./
+COPY cattoy ./cattoy
+RUN pip install ".[nas-gpu]"
+
+# 設定・キャリブレーション・モデル・記録は /data に置く（NAS の共有フォルダをマウントする）
+WORKDIR /data
+EXPOSE 8080
+ENTRYPOINT ["cattoy", "--config", "/data/config.toml"]
+CMD ["run"]

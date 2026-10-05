@@ -5,17 +5,20 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "cattoy"
 version = "0.1.0"
-description = "猫を見つけてレーザーで遊ぶ自動おもちゃ（Raspberry Pi 用）"
+description = "猫を見つけてレーザーで遊ぶ自動おもちゃ（NAS のコンテナ＋カメラ付き ESP32 / Raspberry Pi）"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = ["numpy"]
 
 [project.optional-dependencies]
-# Raspberry Pi では OpenCV・picamera2・gpiozero は apt で入れる（README 参照）
+# NAS のコンテナ（ESP32 構成）。GPU を使うなら nas-gpu
+nas = ["onnxruntime", "opencv-python-headless"]
+nas-gpu = ["onnxruntime-gpu>=1.20", "opencv-python-headless"]
+# Raspberry Pi では OpenCV・picamera2・gpiozero は apt で入れる（docs/raspberry-pi.md 参照）
 pi = ["onnxruntime", "adafruit-circuitpython-servokit"]
 # PC で試すとき
 desktop = ["onnxruntime", "opencv-python-headless"]
-dev = ["pytest", "opencv-python-headless"]
+dev = ["pytest", "opencv-python-headless", "onnxruntime", "onnx"]
 
 [project.scripts]
 cattoy = "cattoy.cli:main"
