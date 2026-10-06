@@ -64,7 +64,7 @@ backend = "gpio"
 gpio = 17
 ```
 
-検出モデルは [docs/nas.md](nas.md) の「検出モデルの準備」と同じ方法で作り、`models/yolo11n.onnx` に置きます。
+検出モデルは README の「実機なしで試す」の最後にある方法で作り、`models/yolo11n.onnx` に置きます。
 その後の手順（hw-test → calibrate → run）は README と同じです。コマンドは `.venv/bin/cattoy` で実行します。
 
 ### 自動起動

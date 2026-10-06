@@ -45,9 +45,9 @@
 | --- | --- | --- |
 | 1. 部品をそろえて組み立てる | ESP32-S3 CAM・OV2640 120°・MG90S ×2・パン・チルト台・1mW レーザーなど | [docs/hardware.md](docs/hardware.md) |
 | 2. ESP32 に書き込む | Arduino IDE で `firmware/cattoy_esp32` を書き込む | [firmware/README.md](firmware/README.md) |
-| 3. NAS にコンテナを作る | 検出モデルの準備・コンテナの作成 | [docs/nas.md](docs/nas.md) |
-| 4. 調整する | 配線確認 → 可動範囲の調整 → キャリブレーション | [docs/nas.md](docs/nas.md) の 5 |
-| 5. スマホから使う | `http://<NAS の IP>:8090/` をホーム画面に追加 | [docs/nas.md](docs/nas.md) の 6 |
+| 3. NAS にアプリを作る | Container Station に [YAML](docker/qnap-app.yml) を貼り付ける（2 行だけ書き換え） | [docs/nas.md](docs/nas.md) の 1〜2 |
+| 4. 調整する | 操作画面で可動範囲の調整 → 位置合わせ（キャリブレーション） | [docs/nas.md](docs/nas.md) の 3 |
+| 5. スマホから使う | `http://<NAS の IP>:8090/` をホーム画面に追加 | [docs/nas.md](docs/nas.md) の 4 |
 
 NAS がない場合は、Raspberry Pi 1 台で完結させる構成でも動きます（[docs/raspberry-pi.md](docs/raspberry-pi.md)）。
 
@@ -101,8 +101,17 @@ backend = "mock"
 [play]
 active_hours = ""
 EOF
-cattoy run      # http://localhost:8080/ を開く（検出モデルは docs/nas.md の 3 と同じ方法で用意）
+cattoy run      # http://localhost:8080/ を開く
 ```
+
+検出モデルは、コンテナを使わない場合だけ自分で用意します（`models/yolo11n.onnx` に置く）。
+
+```bash
+pip install ultralytics
+yolo export model=yolo11n.pt format=onnx imgsz=320
+```
+
+> Ultralytics のモデルは AGPL-3.0 ライセンスです。個人で使う分には問題ありません。
 
 ## 開発
 
@@ -131,10 +140,10 @@ pytest
 | `cattoy/preview.py` / `webpage.py` | 操作画面とライブ映像 |
 | `cattoy/cli.py` | コマンド |
 | `firmware/cattoy_esp32/` | ESP32 のファームウェア（Arduino） |
-| `docker/` | コンテナ（GPU 版・CPU 版）と compose 設定 |
+| `docker/` | コンテナ（GPU 版・CPU 版）、Container Station 用の YAML、compose 設定 |
+| `.github/workflows/` | テストと、コンテナイメージの自動作成（ghcr.io） |
 
 ## 今後の拡張案
 
 - **閉ループ補正**: 遊んでいる最中もレーザー点をカメラで確かめ、狙いのずれを補正する。
-- **操作画面からのキャリブレーション**: SSH を使わずにスマホから実行できるようにする。
 - **多頭飼い対応**: 現在は 1 匹を追いかける（2 匹以上いるときは直前に追っていた猫を優先）。

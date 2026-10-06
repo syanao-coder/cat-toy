@@ -64,6 +64,7 @@ h1 { font-size: 18px; margin: 4px 0 0; font-weight: 600; }
 .bar { background: var(--bar); border-radius: 4px 4px 0 0; min-height: 2px; }
 .days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; font-size: 11px; color: var(--sub);
         text-align: center; margin-top: 4px; }
+button.plain:disabled { opacity: .45; }
 button.plain { width: 100%; padding: 12px; border-radius: 12px; border: 1px solid var(--line);
                background: transparent; color: var(--text); font-size: 15px; cursor: pointer; }
 #live img { width: 100%; border-radius: 10px; margin-top: 10px; display: block; cursor: crosshair; }
@@ -75,6 +76,7 @@ details summary { cursor: pointer; color: var(--sub); font-size: 14px; margin-to
 <h1>ねこレーザー</h1>
 
 <div id="offline" class="warn"></div>
+<div id="needcal" class="warn">まだ位置合わせ（キャリブレーション）をしていません。下の「調整」から行ってください。</div>
 
 <section class="card hero">
   <button id="toggle" disabled>…</button>
@@ -102,6 +104,35 @@ details summary { cursor: pointer; color: var(--sub); font-size: 14px; margin-to
 </section>
 
 <section class="card" id="detail"></section>
+
+<section class="card" id="adjust">
+  <details id="adjustBox">
+    <summary style="margin-top:0">調整（設置したとき・取り付けを動かしたとき）</summary>
+    <p style="font-size:14px;color:var(--sub)">① 可動範囲: スライダーでレーザーを動かし、<b>床の遊ばせたい範囲の端</b>を記録して保存します。
+      人や猫の目に向けないでください。</p>
+    <div class="row"><span>パン（左右）</span><span id="panVal">–</span></div>
+    <input type="range" id="pan" min="0" max="180" step="1" style="width:100%">
+    <div class="row"><span>チルト（上下）</span><span id="tiltVal">–</span></div>
+    <input type="range" id="tilt" min="0" max="180" step="1" style="width:100%">
+    <label style="display:block;margin:10px 0;font-size:15px"><input type="checkbox" id="aimLaser"> レーザーを点ける</label>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <button class="plain" data-set="pan_min">パンの端①に記録</button>
+      <button class="plain" data-set="pan_max">パンの端②に記録</button>
+      <button class="plain" data-set="tilt_min">チルトの端①に記録</button>
+      <button class="plain" data-set="tilt_max">チルトの端②に記録</button>
+    </div>
+    <pre id="limits"></pre>
+    <button class="plain" id="saveLimits">この可動範囲を保存</button>
+    <button class="plain" id="stopAim" style="margin-top:8px">調整を終える（レーザーを消す）</button>
+    <div id="limitMsg" style="font-size:14px;margin:8px 0"></div>
+    <hr style="border:none;border-top:1px solid var(--line);margin:16px 0">
+    <p style="font-size:14px;color:var(--sub)">② 位置合わせ: レーザーを 81 か所で点滅させ、カメラの映像とサーボの角度を対応付けます（約 3 分）。
+      <b>猫と人がいない状態で</b>行ってください。可動範囲を変えたら、やり直してください。</p>
+    <button class="plain" id="calBtn">位置合わせを開始</button>
+    <div id="calMsg" style="font-size:14px;margin:8px 0;white-space:pre-wrap"></div>
+    <a id="calImg" href="/calibration.jpg" target="_blank" style="font-size:14px" hidden>結果の画像を見る</a>
+  </details>
+</section>
 
 <section class="card" id="maint" hidden>
   <details>
@@ -153,6 +184,9 @@ function render() {
   if (st.esp32 && st.esp32.online) rows.push(['ESP32 の電波', st.esp32.rssi + ' dBm']);
   $('detail').innerHTML = rows.map(r => '<div class="row"><span>' + r[0] + '</span><span>' + r[1] + '</span></div>').join('');
 
+  $('needcal').style.display = st.needs_calibration ? 'block' : 'none';
+  renderAdjust();
+
   $('maint').hidden = !st.esp32;
   if (st.esp32) {
     const e = st.esp32;
@@ -196,6 +230,69 @@ $('liveImg').onclick = e => {
 };
 $('clearPts').onclick = () => { pts = []; $('pts').textContent = '（まだ記録していません）'; };
 
+// ---------------------------------------------------------------- 調整
+let limits = null, aimSending = false, aimQueued = false, aimInit = false;
+function renderAdjust() {
+  const sv = st.servo, m = st.maintenance || {};
+  if (!limits) limits = { pan_min: sv.pan_min, pan_max: sv.pan_max, tilt_min: sv.tilt_min, tilt_max: sv.tilt_max };
+  if (!aimInit) {
+    $('pan').max = sv.range; $('tilt').max = sv.range;
+    $('pan').value = sv.pan; $('tilt').value = sv.tilt; aimInit = true;
+  }
+  $('panVal').textContent = $('pan').value + '°';
+  $('tiltVal').textContent = $('tilt').value + '°';
+  $('limits').textContent = 'パン ' + Math.min(limits.pan_min, limits.pan_max) + '° 〜 ' + Math.max(limits.pan_min, limits.pan_max) +
+    '°　チルト ' + Math.min(limits.tilt_min, limits.tilt_max) + '° 〜 ' + Math.max(limits.tilt_min, limits.tilt_max) + '°' +
+    '（保存済み: パン ' + sv.pan_min + '〜' + sv.pan_max + '°・チルト ' + sv.tilt_min + '〜' + sv.tilt_max + '°）';
+  const calibrating = m.mode === 'calibrating';
+  $('calBtn').disabled = calibrating;
+  if (calibrating) $('calMsg').textContent = '位置合わせ中… ' + (m.message || '');
+  else if (m.result) $('calMsg').textContent = m.result.ok
+    ? '完了しました（' + m.result.points + ' 点・誤差 ' + m.result.rms_px + ' px・映像の遅れ ' + m.result.latency_ms + ' ms）。誤差は 3 px 以下が目安です。'
+    : '失敗しました: ' + m.result.error;
+  else if (st.calibration) $('calMsg').textContent = '前回の結果: ' + st.calibration.points + ' 点・誤差 ' + st.calibration.rms_px + ' px';
+  $('calImg').hidden = !(st.calibration || (m.result && m.result.ok));
+}
+async function post(path, body) {
+  const r = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || r.status);
+  return j;
+}
+async function sendAim() {
+  if (aimSending) { aimQueued = true; return; }
+  aimSending = true;
+  try {
+    await post('/api/aim', { pan: +$('pan').value, tilt: +$('tilt').value, laser: $('aimLaser').checked });
+    $('limitMsg').textContent = '';
+  } catch (e) { $('limitMsg').textContent = '動かせません: ' + e.message; }
+  aimSending = false;
+  if (aimQueued) { aimQueued = false; sendAim(); }
+}
+['pan', 'tilt'].forEach(id => $(id).addEventListener('input', () => {
+  $(id + 'Val').textContent = $(id).value + '°'; sendAim();
+}));
+$('aimLaser').onchange = sendAim;
+document.querySelectorAll('[data-set]').forEach(b => b.onclick = () => {
+  const key = b.dataset.set;
+  limits[key] = +$(key.startsWith('pan') ? 'pan' : 'tilt').value;
+  renderAdjust();
+});
+$('saveLimits').onclick = async () => {
+  const body = {
+    pan_min: Math.min(limits.pan_min, limits.pan_max), pan_max: Math.max(limits.pan_min, limits.pan_max),
+    tilt_min: Math.min(limits.tilt_min, limits.tilt_max), tilt_max: Math.max(limits.tilt_min, limits.tilt_max),
+  };
+  try { await post('/api/servo-limits', body); $('limitMsg').textContent = '保存しました。続けて ② の位置合わせを行ってください。'; limits = null; refresh(); }
+  catch (e) { $('limitMsg').textContent = '保存できません: ' + e.message; }
+};
+$('stopAim').onclick = async () => { $('aimLaser').checked = false; await post('/api/aim/stop').catch(() => {}); };
+$('calBtn').onclick = async () => {
+  if (!confirm('レーザーが部屋のあちこちを照らします。猫と人がいないことを確認しましたか？')) return;
+  $('aimLaser').checked = false;
+  try { await post('/api/calibrate'); refresh(); } catch (e) { $('calMsg').textContent = '開始できません: ' + e.message; }
+};
+
 $('fwBtn').onclick = () => {
   const f = $('fwFile').files[0];
   if (!f) { $('fwMsg').textContent = 'ファイルを選んでください'; return; }
@@ -224,7 +321,10 @@ $('rebootBtn').onclick = async () => {
 function start() { refresh(); timer = setInterval(refresh, 2000); }
 function stop() { clearInterval(timer); timer = null; }
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) { stop(); if (!$('liveBox').hidden) $('liveBtn').click(); }
+  if (document.hidden) {
+    stop(); if (!$('liveBox').hidden) $('liveBtn').click();
+    if ($('aimLaser').checked) { $('aimLaser').checked = false; post('/api/aim/stop').catch(() => {}); }
+  }
   else if (!timer) start();
 });
 start();

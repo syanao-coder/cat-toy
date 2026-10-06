@@ -14,6 +14,7 @@ import logging
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from typing import Callable
 
 import numpy as np
@@ -71,9 +72,12 @@ class PreviewServer:
         status: Callable[[], dict] | None = None,
         set_enabled: Callable[[bool], None] | None = None,
         actions: dict[str, Callable[[bytes], dict]] | None = None,
+        files: dict[str, Callable[[], Path]] | None = None,
     ):
-        """actions: POST で呼べる追加の操作（パス → 受け取った本文を渡して結果を返す関数）。"""
+        """actions: POST で呼べる追加の操作（パス → 受け取った本文を渡して結果を返す関数）。
+        files: GET で返すファイル（パス → ファイルの場所を返す関数）。"""
         actions = dict(actions or {})
+        files = dict(files or {})
         self._jpeg: bytes | None = None
         self._cond = threading.Condition()
         self._viewers = 0
@@ -106,6 +110,13 @@ class PreviewServer:
                     self._send(200, "image/svg+xml", webpage.ICON_SVG.encode("utf-8"))
                 elif path == "/api/status" and status is not None:
                     self._json(status())
+                elif path in files:
+                    f = files[path]()
+                    if not f.exists():
+                        self.send_error(404)
+                        return
+                    ctype = "image/jpeg" if f.suffix.lower() in (".jpg", ".jpeg") else "application/octet-stream"
+                    self._send(200, ctype, f.read_bytes())
                 elif path == "/snapshot.jpg":
                     server._snapshot_at = time.monotonic()
                     jpeg = server.wait_frame(timeout=3.0)

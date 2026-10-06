@@ -1,5 +1,7 @@
 # cat-toy 設定ファイルの例（NAS のコンテナ ＋ カメラ付き ESP32 の構成）。
-# NAS では docker/data/config.toml にコピーして使う（docs/nas.md 参照）。
+# Container Station のアプリケーション（docker/qnap-app.yml）で動かす場合は、このファイルは不要
+# （ESP32 の IP と合言葉は YAML の環境変数で、可動範囲と位置合わせは操作画面で設定する）。
+# 細かい設定を書きたいときは、NAS の /share/Container/cattoy/config.toml としてコピーして使う。
 # 書いていない項目は既定値になる（既定値と説明は cattoy/config.py を参照）。
 # 座標は画像の幅・高さを 1 とした値（左上が [0, 0]、右下が [1, 1]）。
 

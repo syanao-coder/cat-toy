@@ -7,7 +7,7 @@ import logging
 import time
 from pathlib import Path
 
-from .config import Config, load_config
+from .config import Config, load_full_config
 
 
 def _cmd_run(cfg: Config, args: argparse.Namespace) -> None:
@@ -237,11 +237,9 @@ def main(argv: list[str] | None = None) -> None:
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-    if Path(args.config).exists():
-        cfg = load_config(args.config)
-    else:
-        logging.warning("%s がないため既定値で動かします", args.config)
-        cfg = Config()
+    if not Path(args.config).exists():
+        logging.info("%s がないため、既定値と環境変数の設定で動かします", args.config)
+    cfg = load_full_config(args.config)
     args.func(cfg, args)
 
 

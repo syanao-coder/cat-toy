@@ -16,6 +16,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import logging
+import os
 import signal
 import threading
 import time
@@ -48,6 +49,25 @@ def load_calibration(cfg: Config, image_size: tuple[int, int]) -> Calibration:
         s = cfg.servo
         return Calibration.linear_fallback(image_size, (s.pan_min, s.pan_max), (s.tilt_min, s.tilt_max))
     raise SystemExit(f"{path} がありません。先に `cattoy calibrate` を実行してください。")
+
+
+def model_path(cfg: Config) -> Path:
+    """検出モデルの場所。設定の場所になければ、コンテナに同梱したモデル（CATTOY_BUNDLED_MODEL）を使う。"""
+    path = cfg.resolve(cfg.detector.model_path)
+    bundled = os.environ.get("CATTOY_BUNDLED_MODEL")
+    if not path.exists() and bundled and Path(bundled).exists():
+        log.info("同梱の検出モデルを使います: %s", bundled)
+        return Path(bundled)
+    return path
+
+
+def try_load_calibration(cfg: Config, image_size: tuple[int, int]) -> Calibration | None:
+    """キャリブレーションを読む。まだない（または画像サイズが違う）なら None。"""
+    try:
+        return load_calibration(cfg, image_size)
+    except SystemExit as e:
+        log.warning("%s 操作画面の「位置合わせ」から実行できます。", e)
+        return None
 
 
 def play_area(cfg: Config, cal: Calibration, image_size: tuple[int, int]) -> list[Point]:
@@ -147,6 +167,43 @@ class _Shared:
         self.error: BaseException | None = None
 
 
+class PlaySetup:
+    """キャリブレーションから決まる、遊びの一式（位置合わせをやり直すと作り直す）。"""
+
+    def __init__(self, cfg: Config, cal: Calibration, size: tuple[int, int]):
+        self.cal = cal
+        self.size = size
+        self.latency = cal.latency_s
+        self.area = play_area(cfg, cal, size)
+        self.goal = finish_point(cfg, size)
+        self.tracker = CatTracker(lost_timeout_s=cfg.play.lost_timeout_s, max_extrapolate_s=0.5 + self.latency)
+        self.behavior = PlayBehavior(cfg.play, self.area, size, finish_point=self.goal, latency_s=self.latency)
+
+
+AIM_IDLE_S = 60.0  # 可動範囲の調整で、操作がこれだけないと終了する
+AIM_LASER_S = 20.0  # 調整中のレーザーは、操作がこれだけないと消す
+
+
+class Maintenance:
+    """操作画面から行う調整（位置合わせ・可動範囲の確認）。行っている間は遊びを止め、機器を調整側に渡す。"""
+
+    def __init__(self) -> None:
+        self.lock = threading.Lock()
+        self.mode: str | None = None  # None / "calibrating" / "aim"
+        self.message = ""
+        self.result: dict | None = None
+        self.last_aim = 0.0
+        self.aim_laser = False
+
+    def snapshot(self) -> dict:
+        with self.lock:
+            return {"mode": self.mode, "message": self.message, "result": self.result}
+
+    def set_message(self, msg: str) -> None:
+        with self.lock:
+            self.message = msg
+
+
 def state_label(enabled: bool, active: bool, mode: Mode, cooldown_left: float) -> str:
     if not enabled:
         return "停止中"
@@ -161,7 +218,19 @@ def state_label(enabled: bool, active: bool, mode: Mode, cooldown_left: float) -
     return "猫を待っています"
 
 
+def _json_body(body: bytes) -> dict:
+    try:
+        data = json.loads(body or b"{}")
+    except ValueError as e:
+        raise ValueError("JSON を送ってください") from e
+    if not isinstance(data, dict):
+        raise ValueError("JSON のオブジェクトを送ってください")
+    return data
+
+
 def run(cfg: Config, web_port: int | None = None, stop: threading.Event | None = None) -> None:
+    from .calibrate import calibrate_with
+    from .config import save_ui_settings
     from .detector import YoloOnnxDetector
 
     stop = stop or threading.Event()
@@ -177,17 +246,14 @@ def run(cfg: Config, web_port: int | None = None, stop: threading.Event | None =
     threads: list[threading.Thread] = []
     try:
         size = camera.size
-        cal = load_calibration(cfg, size)
-        area = play_area(cfg, cal, size)
-        goal = finish_point(cfg, size)
         d = cfg.detector
         detector = YoloOnnxDetector(
-            cfg.resolve(d.model_path), d.input_size, d.conf_threshold, d.iou_threshold, d.threads, d.device
+            model_path(cfg), d.input_size, d.conf_threshold, d.iou_threshold, d.threads, d.device
         )
-        latency = cal.latency_s
-        tracker = CatTracker(lost_timeout_s=cfg.play.lost_timeout_s, max_extrapolate_s=0.5 + latency)
-        behavior = PlayBehavior(cfg.play, area, size, finish_point=goal, latency_s=latency)
         shared = _Shared()
+        maint = Maintenance()
+        cal = try_load_calibration(cfg, size)
+        play: PlaySetup | None = PlaySetup(cfg, cal, size) if cal is not None else None
 
         def active_now() -> bool:
             return is_active_time(cfg.play.active_hours, dt.datetime.now().time())
@@ -196,57 +262,170 @@ def run(cfg: Config, web_port: int | None = None, stop: threading.Event | None =
             now = time.monotonic()
             with shared.lock:
                 cmd, fps, vision, esp, person_at = shared.cmd, shared.fps, shared.vision, shared.esp32, shared.person_seen_at
-            cooldown_left = max(0.0, behavior.cooldown_until - now)
+            p = play
             active = active_now()
+            mode = p.behavior.mode if p else Mode.IDLE
+            cooldown_left = max(0.0, p.behavior.cooldown_until - now) if p else 0.0
+            m = maint.snapshot()
+            if m["mode"] == "calibrating":
+                label = "位置合わせ中"
+            elif m["mode"] == "aim":
+                label = "可動範囲の調整中"
+            elif p is None:
+                label = "位置合わせが必要です"
+            else:
+                label = state_label(store.enabled, active, mode, cooldown_left)
+            s = cfg.servo
             return {
                 "enabled": store.enabled,
-                "label": state_label(store.enabled, active, behavior.mode, cooldown_left),
-                "mode": behavior.mode.value,
+                "label": label,
+                "mode": mode.value,
                 "move": cmd.move.value if cmd and cmd.move else None,
                 "reason": cmd.reason if cmd else "",
                 "laser": bool(cmd and cmd.laser_on),
-                "cat": tracker.state_at(now) is not None,
+                "cat": bool(p and p.tracker.state_at(now) is not None),
                 "person": now - person_at < PERSON_HOLD_S,
                 "active_hours": cfg.play.active_hours,
                 "in_active_hours": active,
                 "vision": vision,
                 "fps": round(fps, 1),
                 "detector": detector.provider,
-                "latency_ms": round(latency * 1000),
-                "session_played_s": round(behavior.played_s),
+                "needs_calibration": p is None,
+                "calibration": (
+                    {"points": len(p.cal.points), "rms_px": round(p.cal.rms_px, 1), "latency_ms": round(p.latency * 1000)}
+                    if p else None
+                ),
+                "latency_ms": round(p.latency * 1000) if p else 0,
+                "session_played_s": round(p.behavior.played_s) if p else 0,
                 "session_max_s": cfg.play.session_max_s,
                 "cooldown_left_s": round(cooldown_left),
                 "today_play_s": round(store.today_play_s()),
                 "recent": store.recent(),
                 "esp32": esp,
+                "maintenance": m,
+                "servo": {
+                    "pan_min": s.pan_min, "pan_max": s.pan_max, "tilt_min": s.tilt_min, "tilt_max": s.tilt_max,
+                    "pan_home": s.pan_home, "tilt_home": s.tilt_home, "range": s.actuation_range,
+                    "pan": round(pantilt.pan, 1), "tilt": round(pantilt.tilt, 1),
+                },
             }
 
+        # ---------------------------------------------------------------- 操作画面からの調整
+
+        def start_calibration(_: bytes) -> dict:
+            with maint.lock:
+                if maint.mode == "calibrating":
+                    raise ValueError("位置合わせはすでに実行中です")
+                maint.mode, maint.message, maint.result = "calibrating", "準備しています", None
+
+            def worker() -> None:
+                nonlocal play
+                try:
+                    new_cal = calibrate_with(
+                        cfg, camera, laser, pantilt, progress=maint.set_message,
+                        on_frame=preview.update if preview is not None else None,
+                    )
+                    new_play = PlaySetup(cfg, new_cal, size)
+                    play = new_play
+                    result = {
+                        "ok": True, "points": len(new_cal.points), "rms_px": round(new_cal.rms_px, 1),
+                        "latency_ms": round(new_cal.latency_s * 1000),
+                    }
+                    log.info("操作画面からの位置合わせが終わりました: %s", result)
+                except Exception as e:  # 失敗しても遊びは前の状態のまま続ける
+                    log.exception("位置合わせに失敗しました")
+                    result = {"ok": False, "error": str(e)}
+                finally:
+                    laser.off()
+                with maint.lock:
+                    maint.mode, maint.message, maint.result = None, "", result
+
+            threading.Thread(target=worker, name="calibrate", daemon=True).start()
+            return {"ok": True}
+
+        def aim(body: bytes) -> dict:
+            data = _json_body(body)
+            s = cfg.servo
+            pan = float(data.get("pan", pantilt.pan))
+            tilt = float(data.get("tilt", pantilt.tilt))
+            want_laser = bool(data.get("laser", False))
+            with maint.lock:
+                if maint.mode == "calibrating":
+                    raise ValueError("位置合わせ中です")
+                maint.mode = "aim"
+                maint.last_aim = time.monotonic()
+                maint.aim_laser = want_laser
+            # 調整中は保存済みの可動範囲を超えて動かせる（範囲を広げるため）。サーボの物理的な範囲には収める
+            pan = min(max(pan, 0.0), s.actuation_range)
+            tilt = min(max(tilt, 0.0), s.actuation_range)
+            saved = (s.pan_min, s.pan_max, s.tilt_min, s.tilt_max)
+            s.pan_min, s.pan_max, s.tilt_min, s.tilt_max = 0.0, s.actuation_range, 0.0, s.actuation_range
+            try:
+                pantilt.move(pan, tilt)
+            finally:
+                s.pan_min, s.pan_max, s.tilt_min, s.tilt_max = saved
+            laser.set(want_laser)
+            return {"ok": True, "pan": pantilt.pan, "tilt": pantilt.tilt}
+
+        def stop_aim(_: bytes = b"") -> dict:
+            with maint.lock:
+                if maint.mode == "aim":
+                    maint.mode = None
+            laser.off()
+            pantilt.release()
+            return {"ok": True}
+
+        def save_servo_limits(body: bytes) -> dict:
+            data = _json_body(body)
+            s = cfg.servo
+            values = {k: float(data[k]) for k in ("pan_min", "pan_max", "tilt_min", "tilt_max") if k in data}
+            merged = {k: values.get(k, getattr(s, k)) for k in ("pan_min", "pan_max", "tilt_min", "tilt_max")}
+            for axis in ("pan", "tilt"):
+                lo, hi = merged[f"{axis}_min"], merged[f"{axis}_max"]
+                if not 0 <= lo < hi <= s.actuation_range:
+                    raise ValueError(f"{axis} の範囲が不正です（0 ≦ 最小 ＜ 最大 ≦ {s.actuation_range:g}）")
+            merged["pan_home"] = (merged["pan_min"] + merged["pan_max"]) / 2
+            merged["tilt_home"] = (merged["tilt_min"] + merged["tilt_max"]) / 2
+            save_ui_settings(cfg, "servo", merged)
+            log.info("操作画面から可動範囲を保存しました: %s", merged)
+            return {"ok": True, **merged}
+
         def maintenance_actions() -> dict:
-            """操作画面から ESP32 のファームウェアを書き換え・再起動する（ESP32 構成のときだけ）。"""
-            if getattr(pantilt, "link", None) is None:
-                return {}
-            from . import firmware
+            actions = {
+                "/api/calibrate": start_calibration,
+                "/api/aim": aim,
+                "/api/aim/stop": stop_aim,
+                "/api/servo-limits": save_servo_limits,
+            }
+            if getattr(pantilt, "link", None) is not None:
+                from . import firmware
 
-            def update(body: bytes) -> dict:
-                log.info("操作画面からファームウェアの書き換えを受け付けました（%d バイト）", len(body))
-                return {"ok": True, **firmware.upload_firmware(cfg.esp32, body)}
+                def update(body: bytes) -> dict:
+                    log.info("操作画面からファームウェアの書き換えを受け付けました（%d バイト）", len(body))
+                    return {"ok": True, **firmware.upload_firmware(cfg.esp32, body)}
 
-            def reboot(_: bytes) -> dict:
-                firmware.reboot(cfg.esp32)
-                return {"ok": True}
+                def reboot(_: bytes) -> dict:
+                    firmware.reboot(cfg.esp32)
+                    return {"ok": True}
 
-            return {"/api/esp32/firmware": update, "/api/esp32/reboot": reboot}
+                actions.update({"/api/esp32/firmware": update, "/api/esp32/reboot": reboot})
+            return actions
 
         port = web_port if web_port is not None else cfg.runtime.web_port
         if port:
             from .preview import PreviewServer
 
-            preview = PreviewServer(port, status=status, set_enabled=store.set_enabled, actions=maintenance_actions())
+            preview = PreviewServer(
+                port, status=status, set_enabled=store.set_enabled, actions=maintenance_actions(),
+                files={"/calibration.jpg": lambda: cfg.resolve(cfg.calibration.path).with_suffix(".jpg")},
+            )
 
-        def vision_mode(now: float) -> str:
-            if not store.enabled or not active_now() or behavior.mode is Mode.COOLDOWN:
+        # ---------------------------------------------------------------- 映像
+
+        def vision_mode(now: float, p: PlaySetup | None) -> str:
+            if p is None or not store.enabled or not active_now() or p.behavior.mode is Mode.COOLDOWN:
                 return "off"
-            if behavior.mode in (Mode.PLAY, Mode.FINISH) or tracker.state_at(now) is not None:
+            if p.behavior.mode in (Mode.PLAY, Mode.FINISH) or p.tracker.state_at(now) is not None:
                 return "active"
             return "standby"
 
@@ -256,8 +435,12 @@ def run(cfg: Config, web_port: int | None = None, stop: threading.Event | None =
             last = time.monotonic()
             try:
                 while not stop.is_set():
+                    if maint.mode == "calibrating":  # カメラは位置合わせ側が使う
+                        stop.wait(0.2)
+                        continue
                     started = time.monotonic()
-                    mode = vision_mode(started)
+                    p = play
+                    mode = vision_mode(started, p)
                     viewing = preview is not None and preview.has_viewers()
                     with shared.lock:
                         shared.vision = mode
@@ -267,20 +450,24 @@ def run(cfg: Config, web_port: int | None = None, stop: threading.Event | None =
                         continue
                     camera.set_streaming(mode == "active" or viewing)
                     frame, arrived = camera.read_with_time()
-                    t = arrived - latency  # 実際に撮影されたおおよその時刻
+                    if maint.mode == "calibrating":
+                        continue
                     dets: list[Detection] = detector.detect(frame) if mode != "off" else []
-                    tracker.update(t, [x for x in dets if x.label == "cat"])
                     now = time.monotonic()
+                    if p is not None:
+                        t = arrived - p.latency  # 実際に撮影されたおおよその時刻
+                        p.tracker.update(t, [x for x in dets if x.label == "cat"])
                     with shared.lock:
                         if any(x.label == "person" for x in dets):
-                            shared.person_seen_at = t
+                            shared.person_seen_at = arrived
                         shared.fps = 0.8 * shared.fps + 0.2 / max(now - last, 1e-3)
                         cmd, fps = shared.cmd, shared.fps
                     last = now
                     if viewing:
                         img = draw_overlay(
-                            frame, area, dets, tracker.state_at(now), cmd, goal, cfg.play.keepout_margin,
-                            f"{mode} {fps:.1f}fps {detector.provider} played {behavior.played_s:.0f}s",
+                            frame, p.area if p else None, dets, p.tracker.state_at(now) if p else None, cmd,
+                            p.goal if p else None, cfg.play.keepout_margin,
+                            f"{mode} {fps:.1f}fps {detector.provider}" + (f" played {p.behavior.played_s:.0f}s" if p else ""),
                         )
                         preview.update(img)
                     if mode == "standby":
@@ -314,9 +501,13 @@ def run(cfg: Config, web_port: int | None = None, stop: threading.Event | None =
             th.start()
 
         log.info(
-            "開始しました（画像 %dx%d, 認識 %s, 映像の遅れ %.0f ms, %s）",
-            size[0], size[1], detector.provider, latency * 1000, "ON" if store.enabled else "OFF",
+            "開始しました（画像 %dx%d, 認識 %s, %s, %s）",
+            size[0], size[1], detector.provider,
+            f"映像の遅れ {play.latency * 1000:.0f} ms" if play else "位置合わせ未実施",
+            "ON" if store.enabled else "OFF",
         )
+
+        # ---------------------------------------------------------------- 制御
         period = 1.0 / cfg.runtime.control_hz
         last_aim = time.monotonic()
         last_t = time.monotonic()
@@ -324,20 +515,36 @@ def run(cfg: Config, web_port: int | None = None, stop: threading.Event | None =
         while not stop.is_set():
             now = time.monotonic()
             dt_s, last_t = now - last_t, now
-            if store.enabled:
-                cat = tracker.state_at(now)
-                with shared.lock:
-                    person = now - shared.person_seen_at < PERSON_HOLD_S
-                cmd = behavior.step(now, cat, person, active_now())
-                if cmd.mode is Mode.PLAY:
-                    store.add_play(dt_s)
+            p = play
+            with maint.lock:
+                m_mode, idle = maint.mode, now - maint.last_aim
+            if m_mode == "aim":
+                # 可動範囲の調整中: サーボとレーザーは調整側が動かす。放っておかれたら安全側に戻す
+                if idle > AIM_LASER_S:
+                    laser.off()
+                if idle > AIM_IDLE_S:
+                    stop_aim()
+                cmd = Command(laser.is_on, None, Mode.IDLE, None, "可動範囲の調整中")
+            elif m_mode == "calibrating":
+                cmd = Command(False, None, Mode.IDLE, None, "位置合わせ中")
+            elif p is None:
+                cmd = Command(False, None, Mode.IDLE, None, "位置合わせが必要です")
+                laser.set(False)
             else:
-                cmd = Command(False, None, behavior.mode, None, "OFF")
-            if cmd.target is not None:
-                pantilt.move(*cal.pixel_to_angles(*cmd.target))
-                last_aim = now
-            laser.set(cmd.laser_on)
-            if cmd.target is None and now - last_aim > cfg.servo.release_after_s:
+                if store.enabled:
+                    cat = p.tracker.state_at(now)
+                    with shared.lock:
+                        person = now - shared.person_seen_at < PERSON_HOLD_S
+                    cmd = p.behavior.step(now, cat, person, active_now())
+                    if cmd.mode is Mode.PLAY:
+                        store.add_play(dt_s)
+                else:
+                    cmd = Command(False, None, p.behavior.mode, None, "OFF")
+                if cmd.target is not None:
+                    pantilt.move(*p.cal.pixel_to_angles(*cmd.target))
+                    last_aim = now
+                laser.set(cmd.laser_on)
+            if m_mode is None and cmd.target is None and now - last_aim > cfg.servo.release_after_s:
                 pantilt.release()
             with shared.lock:
                 shared.cmd = cmd

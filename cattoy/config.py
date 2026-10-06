@@ -7,11 +7,15 @@ from __future__ import annotations
 
 import dataclasses
 import datetime as _dt
+import json
+import logging
+import os
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
+log = logging.getLogger(__name__)
 
 @dataclass
 class Esp32Config:
@@ -116,6 +120,7 @@ class RuntimeConfig:
     web_port: int = 8080  # 操作画面（スマホ用）のポート。0 なら無効
     standby_interval_s: float = 1.0  # 猫がいない間は、この間隔でだけ認識する（負荷を下げる）
     state_path: str = "state.json"  # ON/OFF と遊んだ記録の保存先
+    settings_path: str = "settings.json"  # 操作画面で変えた設定（サーボの可動範囲など）の保存先
 
 
 @dataclass
@@ -169,6 +174,102 @@ def load_config(path: str | Path | None) -> Config:
         kwargs[key] = _fill(_SECTIONS[key], value, key)
     cfg = Config(**kwargs, base_dir=path.resolve().parent)
     parse_active_hours(cfg.play.active_hours)  # 書式チェック
+    return cfg
+
+
+def _coerce(value: str, current: Any, name: str) -> Any:
+    try:
+        if isinstance(current, bool):
+            v = value.strip().lower()
+            if v in ("1", "true", "yes", "on"):
+                return True
+            if v in ("0", "false", "no", "off"):
+                return False
+            raise ValueError(value)
+        if isinstance(current, int):
+            return int(value)
+        if isinstance(current, float):
+            return float(value)
+        if isinstance(current, list):
+            return json.loads(value)
+    except ValueError as e:
+        raise ValueError(f"環境変数 {name} の値が不正です: {value!r}") from e
+    return value
+
+
+def apply_env(cfg: Config, environ: Mapping[str, str]) -> list[str]:
+    """環境変数 CATTOY_<セクション>_<項目>（例: CATTOY_ESP32_HOST）で設定を上書きする。
+
+    コンテナ（QNAP Container Station のアプリケーションの YAML など）から設定ファイルなしで動かすため。
+    """
+    applied = []
+    for section, cls in _SECTIONS.items():
+        obj = getattr(cfg, section)
+        for f in dataclasses.fields(cls):
+            name = f"CATTOY_{section}_{f.name}".upper()
+            if name in environ:
+                current = getattr(obj, f.name)
+                if section == "camera" and f.name == "device":  # 数字ならデバイス番号、それ以外はファイル名・URL
+                    value: Any = int(environ[name]) if environ[name].isdigit() else environ[name]
+                else:
+                    value = _coerce(environ[name], current, name)
+                setattr(obj, f.name, value)
+                applied.append(name)
+    return applied
+
+
+# 操作画面から変えてよい設定（セクション → 項目）
+UI_EDITABLE = {"servo": ("pan_min", "pan_max", "tilt_min", "tilt_max", "pan_home", "tilt_home")}
+
+
+def apply_ui_settings(cfg: Config) -> None:
+    """操作画面で保存した設定（settings.json）を反映する。設定ファイル・環境変数より優先する。"""
+    path = cfg.resolve(cfg.runtime.settings_path)
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return
+    except (OSError, ValueError) as e:
+        log.warning("%s を読めません（無視します）: %s", path, e)
+        return
+    for section, values in data.items():
+        for key, value in values.items():
+            if key in UI_EDITABLE.get(section, ()):
+                setattr(getattr(cfg, section), key, type(getattr(getattr(cfg, section), key))(value))
+
+
+def save_ui_settings(cfg: Config, section: str, values: Mapping[str, Any]) -> None:
+    """操作画面で変えた設定を settings.json に保存し、cfg にも反映する。"""
+    allowed = UI_EDITABLE.get(section, ())
+    bad = set(values) - set(allowed)
+    if bad:
+        raise ValueError(f"操作画面からは変えられない項目です: {', '.join(sorted(bad))}")
+    path = cfg.resolve(cfg.runtime.settings_path)
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, ValueError):
+        data = {}
+    obj = getattr(cfg, section)
+    for key, value in values.items():
+        value = type(getattr(obj, key))(value)
+        setattr(obj, key, value)
+        data.setdefault(section, {})[key] = value
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
+def load_full_config(path: str | Path, environ: Mapping[str, str] | None = None) -> Config:
+    """設定ファイル（なければ既定値）→ 環境変数 → 操作画面の設定 の順に重ねて読み込む。"""
+    path = Path(path)
+    environ = os.environ if environ is None else environ
+    if path.exists():
+        cfg = load_config(path)
+    else:
+        cfg = Config(base_dir=path.resolve().parent)
+    applied = apply_env(cfg, environ)
+    if applied:
+        log.info("環境変数で設定しました: %s", ", ".join(applied))
+    apply_ui_settings(cfg)
+    parse_active_hours(cfg.play.active_hours)
     return cfg
 
 
