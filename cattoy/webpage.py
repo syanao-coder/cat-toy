@@ -191,7 +191,8 @@ function render() {
   if (st.esp32) {
     const e = st.esp32;
     $('fwInfo').textContent = e.online
-      ? 'ファームウェア ' + e.fw + '（' + (e.built || '') + '・' + (e.partition || '') + '）　起動から ' + fmtSpan(e.uptime_s || 0)
+      ? 'ファームウェア ' + e.fw + '（' + (e.built || '') + '・' + (e.partition || '') + '）　起動から ' + fmtSpan(e.uptime_s || 0) +
+        (e.mac ? '　IP ' + e.ip + '・MAC ' + e.mac : '')
       : 'ESP32 とつながっていません';
   }
 }

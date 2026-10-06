@@ -33,7 +33,7 @@
 #include "esp_partition.h"
 #include "secrets.h"  // secrets.example.h をコピーして作る（Wi-Fi の SSID・パスワードなど）
 
-#define FW_VERSION "0.2.1"
+#define FW_VERSION "0.2.2"
 
 // NAS が書き込む前に「このリポジトリのファームウェアか」「版とビルド日時」を確かめるための目印。消さないこと。
 // （目印のないファームウェアには遠隔更新や自動の巻き戻しが入っておらず、書き込むと設置したまま戻せなくなるため）
@@ -190,15 +190,15 @@ static esp_err_t captureHandler(httpd_req_t *req) {
 }
 
 static esp_err_t statusHandler(httpd_req_t *req) {
-  char json[448];
+  char json[640];
   const esp_partition_t *running = esp_ota_get_running_partition();
   snprintf(json, sizeof(json),
            "{\"fw\":\"%s\",\"built\":\"%s %s\",\"partition\":\"%s\",\"uptime_s\":%lu,\"rssi\":%d,"
-           "\"ssid\":\"%s\",\"ip\":\"%s\",\"laser\":%d,\"servo\":%d,\"pan_us\":%d,\"tilt_us\":%d,"
+           "\"ssid\":\"%s\",\"ip\":\"%s\",\"mac\":\"%s\",\"laser\":%d,\"servo\":%d,\"pan_us\":%d,\"tilt_us\":%d,"
            "\"cmd_age_ms\":%lu,\"cmd_count\":%lu,\"button\":%lu,\"stream_clients\":%d,\"updating\":%d,\"trial\":%d,"
            "\"free_heap\":%u,\"free_psram\":%u}",
            FW_VERSION, __DATE__, __TIME__, running ? running->label : "?", millis() / 1000, WiFi.RSSI(),
-           wifiSsid.c_str(), WiFi.localIP().toString().c_str(), laserOn ? 1 : 0, servoOn ? 1 : 0, panUs, tiltUs,
+           wifiSsid.c_str(), WiFi.localIP().toString().c_str(), WiFi.macAddress().c_str(), laserOn ? 1 : 0, servoOn ? 1 : 0, panUs, tiltUs,
            millis() - lastCmdMs, cmdCount, buttonCount, streamClients, updating ? 1 : 0, newFirmware ? 1 : 0,
            (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getFreePsram());
   httpd_resp_set_type(req, "application/json");
@@ -483,8 +483,10 @@ static bool connectWifi(unsigned long timeoutMs) {
     delay(250);
     Serial.print(".");
   }
-  Serial.printf("\n接続しました。IP アドレス: %s（NAS の config.toml の [esp32] host に書く）\n",
+  Serial.printf("\n接続しました。IP アドレス: %s（NAS の CATTOY_ESP32_HOST に書く）\n",
                 WiFi.localIP().toString().c_str());
+  Serial.printf("MAC アドレス: %s（ルーターの DHCP 固定割り当てに登録すると IP が変わらなくなる）\n",
+                WiFi.macAddress().c_str());
   return true;
 }
 
