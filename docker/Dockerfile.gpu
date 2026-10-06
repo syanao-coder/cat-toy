@@ -1,6 +1,7 @@
 # NVIDIA GPU（Quadro T400 など）で認識するコンテナ。
-# 新しい onnxruntime-gpu は CUDA 12.8 以降が必要。NAS の NVIDIA ドライバが CUDA 12.8 以上に対応していること
+# CUDA 12.8 で動かす。NAS の NVIDIA ドライバが CUDA 12.8 以上に対応していること
 # （nvidia-smi の右上の「CUDA Version」で確認できる）。
+# onnxruntime-gpu は 1.27 から CUDA 13 用になったので、pyproject.toml で 1.26 までに固定している。
 # ---- 検出モデル（COCO で学習済みの YOLO11n）を ONNX に書き出す。ビルドのときだけ使い、最終イメージには ONNX だけを入れる
 FROM python:3.12-slim AS model
 RUN apt-get update \
@@ -29,6 +30,11 @@ WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY cattoy ./cattoy
 RUN pip install ".[nas-gpu]"
+# GPU 用のライブラリが、このイメージの CUDA で読み込めるかを確かめる（読めないと黙って CPU で動いてしまうため）
+RUN so=$(python -c 'import onnxruntime, os; print(os.path.join(os.path.dirname(onnxruntime.__file__), "capi", "libonnxruntime_providers_cuda.so"))') \
+ && test -f "$so" \
+ && missing=$(ldd "$so" | grep 'not found' || true) \
+ && if [ -n "$missing" ]; then echo "CUDA のライブラリが足りません（onnxruntime-gpu と CUDA の版が合っていない）:"; echo "$missing"; exit 1; fi
 COPY --from=model /m/yolo11n.onnx /app/models/yolo11n.onnx
 ENV CATTOY_BUNDLED_MODEL=/app/models/yolo11n.onnx
 
