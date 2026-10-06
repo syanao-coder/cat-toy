@@ -1,0 +1,21 @@
+# 電源を入れたら自動で起動する設定。
+#   sudo cp systemd/cattoy.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now cattoy
+# ログの確認: journalctl -u cattoy -f
+# User と パス（/home/pi/cat-toy）は自分の環境に合わせて書き換えること。
+
+[Unit]
+Description=cat-toy (automatic laser toy for cats)
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/cat-toy
+ExecStart=/home/pi/cat-toy/.venv/bin/cattoy --config /home/pi/cat-toy/config.toml run
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

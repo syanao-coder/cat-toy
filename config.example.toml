@@ -1,0 +1,56 @@
+# cat-toy 設定ファイルの例（NAS のコンテナ ＋ カメラ付き ESP32 の構成）。
+# Container Station のアプリケーション（docker/qnap-app.yml）で動かす場合は、このファイルは不要
+# （ESP32 の IP と合言葉は YAML の環境変数で、可動範囲と位置合わせは操作画面で設定する）。
+# 細かい設定を書きたいときは、NAS の /share/Container/cattoy/config.toml としてコピーして使う。
+# 書いていない項目は既定値になる（既定値と説明は cattoy/config.py を参照）。
+# 座標は画像の幅・高さを 1 とした値（左上が [0, 0]、右下が [1, 1]）。
+
+[esp32]
+host = "192.168.1.50"   # ESP32 の IP アドレス（シリアルモニタに表示される。ルーターで固定しておく）
+key = "change-me"       # ファームウェアの secrets.h の CATTOY_KEY と同じ文字列
+
+[camera]
+backend = "esp32"       # Raspberry Pi カメラなら "picamera2"、USB カメラなら "opencv"
+width = 640             # ファームウェアの解像度（VGA）と合わせる
+height = 480
+hflip = false           # 映像が左右逆なら true
+vflip = false           # 映像が上下逆なら true
+
+[detector]
+model_path = "models/yolo11n.onnx"
+input_size = 320
+conf_threshold = 0.35
+device = "auto"         # "auto"（GPU があれば GPU）/ "cuda" / "cpu"
+
+[servo]
+backend = "esp32"
+# 可動範囲（度）。`cattoy hw-test --laser` と `cattoy aim --angles PAN TILT` で確かめ、
+# 床の遊ばせたい範囲だけを照らすように狭める。窓・テレビ・人の顔の高さに届かない範囲にしておくこと。
+pan_min = 40
+pan_max = 140
+tilt_min = 40
+tilt_max = 120
+pan_home = 90
+tilt_home = 80
+
+[laser]
+backend = "esp32"
+
+[calibration]
+path = "calibration.json"
+grid = 9
+
+[play]
+session_max_s = 600     # 1 回 10 分まで
+cooldown_s = 1800       # その後 30 分休む
+active_hours = "07:00-23:00"
+person_safety = true    # 人が写っている間は消灯
+# 遊ばせる範囲（多角形）。空ならキャリブレーションで点が写った範囲を自動で使う。
+# 操作画面の「ライブ映像」をタップすると座標が得られる。
+# play_area = [[0.1, 0.4], [0.9, 0.4], [0.95, 0.95], [0.05, 0.95]]
+# 終わりにレーザーを誘導する場所（おもちゃ・おやつを置いておくと「捕まえた」で終われる）
+# finish_point = [0.5, 0.8]
+
+[runtime]
+web_port = 8080            # 操作画面（コンテナの外からは compose.yml で 8090 番に出している）
+standby_interval_s = 1.0   # 猫がいない間は 1 秒に 1 回だけ認識する
