@@ -33,7 +33,11 @@
 #include "esp_partition.h"
 #include "secrets.h"  // secrets.example.h をコピーして作る（Wi-Fi の SSID・パスワードなど）
 
-#define FW_VERSION "0.2.0"
+#define FW_VERSION "0.2.1"
+
+// NAS が書き込む前に「このリポジトリのファームウェアか」「版とビルド日時」を確かめるための目印。消さないこと。
+// （目印のないファームウェアには遠隔更新や自動の巻き戻しが入っておらず、書き込むと設置したまま戻せなくなるため）
+extern "C" const char CATTOY_FW_TAG[] = "CATTOY_FW|" FW_VERSION "|" __DATE__ " " __TIME__ "|";
 
 // ---------------------------------------------------------------- カメラのピン（ESP32-S3-EYE と同じ配置）
 #define PWDN_GPIO_NUM -1
@@ -518,6 +522,7 @@ void setup() {
   Serial.begin(115200);
   delay(200);
   Serial.printf("\ncat-toy firmware %s\n", FW_VERSION);
+  asm volatile("" ::"r"(CATTOY_FW_TAG));  // 目印がリンク時に削られないよう参照しておく
 
   prefs.begin("cattoy", false);
   idfPendingVerify = isNewFirmware();

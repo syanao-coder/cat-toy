@@ -6,6 +6,7 @@ ESP32 を取り外さずに、NAS（またはこのリポジトリを入れた P
 from __future__ import annotations
 
 import hashlib
+import re
 import struct
 import time
 import urllib.error
@@ -20,11 +21,13 @@ CHIP_ID_ESP32S3 = 9
 MAX_APP_SIZE = 3 * 1024 * 1024  # パーティション「16M Flash (3MB APP/9.9MB FATFS)」の 1 枠の大きさ
 
 
-def inspect_image(data: bytes) -> dict:
+def inspect_image(data: bytes, allow_foreign: bool = False) -> dict:
     """書き込もうとしているファイルが ESP32-S3 用のアプリのイメージか確かめ、版の情報を返す。
 
     Arduino IDE の「コンパイルしたバイナリを出力」で作られる `cattoy_esp32.ino.bin` を想定している。
     ブートローダーまで含んだ `merged.bin` や、別のチップ用のファイルは受け付けない。
+    版とビルド日時は、ファームウェアに埋め込んだ目印（CATTOY_FW_TAG）から読む
+    （ESP-IDF のアプリ情報の欄は Arduino のライブラリの情報で埋まっていて、スケッチの版を表さないため）。
     """
     if len(data) < 256 or data[0] != ESP_IMAGE_MAGIC:
         raise ValueError("ESP32 のファームウェアのファイルではありません（.ino.bin を指定してください）")
@@ -39,15 +42,17 @@ def inspect_image(data: bytes) -> dict:
     if magic != APP_DESC_MAGIC:
         raise ValueError("アプリのイメージではありません（ブートローダーや merged.bin の可能性があります）")
 
-    def text(offset: int, size: int) -> str:
-        return data[offset : offset + size].split(b"\0", 1)[0].decode("ascii", "replace")
-
+    tag = re.search(rb"CATTOY_FW\|([0-9A-Za-z.\-]{1,16})\|([A-Za-z0-9: ]{8,24})\|", data)
+    if tag is None and not allow_foreign:
+        raise ValueError(
+            "cat-toy のファームウェアではありません（目印が見つかりません）。"
+            "遠隔更新や自動の巻き戻しが入っていないファームウェアを書き込むと、取り外さないと戻せなくなります"
+        )
     return {
         "size": len(data),
         "md5": hashlib.md5(data).hexdigest(),
-        "version": text(32 + 16, 32),
-        "project": text(32 + 48, 32),
-        "built": f"{text(32 + 96, 16)} {text(32 + 80, 16)}",
+        "fw": tag.group(1).decode() if tag else "不明",
+        "built": " ".join(tag.group(2).decode().split()) if tag else "不明",
     }
 
 
@@ -63,9 +68,9 @@ def _post(cfg: Esp32Config, path: str, body: bytes, headers: dict[str, str], tim
         raise RuntimeError(f"ESP32（{cfg.host}）に接続できません: {e}") from e
 
 
-def upload_firmware(cfg: Esp32Config, data: bytes, timeout: float = 120.0) -> dict:
+def upload_firmware(cfg: Esp32Config, data: bytes, timeout: float = 120.0, allow_foreign: bool = False) -> dict:
     """ファームウェアを送って書き換えさせる。ESP32 は受け取ったあと自分で再起動する。"""
-    info = inspect_image(data)
+    info = inspect_image(data, allow_foreign)
     _post(
         cfg,
         "/update",

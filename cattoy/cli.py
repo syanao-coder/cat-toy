@@ -143,14 +143,14 @@ def _cmd_esp32_update(cfg: Config, args: argparse.Namespace) -> None:
     from . import firmware
 
     data = Path(args.file).read_bytes()
-    info = firmware.inspect_image(data)
+    info = firmware.inspect_image(data, allow_foreign=args.force)
     link = _esp32_link(cfg)
     try:
         print("今の ESP32:")
         _print_status(link.status())
-        print(f"書き込むファイル: {args.file}（{info['size']:,} バイト・{info['built']} にビルド）")
+        print(f"書き込むファイル: {args.file}（版 {info['fw']}・{info['built']} にビルド・{info['size']:,} バイト）")
         print("送信中です。終わるまで電源を切らないでください…")
-        firmware.upload_firmware(cfg.esp32, data)
+        firmware.upload_firmware(cfg.esp32, data, allow_foreign=args.force)
         print("書き換えました。再起動を待っています…")
         st = firmware.wait_until_back(link.status)
         if st is None:
@@ -221,6 +221,7 @@ def main(argv: list[str] | None = None) -> None:
 
     sp = sub.add_parser("esp32-update", help="ESP32 のファームウェアをネットワーク越しに書き換える")
     sp.add_argument("file", help="Arduino IDE で出力した cattoy_esp32.ino.bin")
+    sp.add_argument("--force", action="store_true", help="cat-toy 以外のファームウェアも書き込む（遠隔で戻せなくなるので注意）")
     sp.set_defaults(func=_cmd_esp32_update)
 
     sp = sub.add_parser("esp32-reboot", help="ESP32 を再起動する")

@@ -16,23 +16,33 @@ from cattoy import cli, firmware
 from cattoy.config import Esp32Config
 
 
-def fake_image(chip_id=9, size=200_000, app_magic=0xABCD5432):
+TAG = b"CATTOY_FW|0.2.1|Oct  6 2026 12:34:56|\0"
+
+
+def fake_image(chip_id=9, size=200_000, app_magic=0xABCD5432, tag=TAG):
+    """Arduino のビルド結果と同じ並びの偽イメージ（アプリ情報の欄は Arduino のライブラリの値になっている）。"""
     head = bytearray(size)
     head[0] = 0xE9
     struct.pack_into("<H", head, 12, chip_id)
     struct.pack_into("<I", head, 32, app_magic)
-    head[48:48 + 5] = b"0.2.0"
-    head[80:80 + 13] = b"cattoy_esp32\0"
-    head[112:112 + 8] = b"12:34:56"
-    head[128:128 + 11] = b"Oct  6 2026"
+    head[48:48 + 7] = b"ee57070"
+    head[80:80 + 19] = b"arduino-lib-builder"
+    head[50_000:50_000 + len(tag)] = tag
     return bytes(head)
 
 
 def test_inspect_image_accepts_s3_app():
     info = firmware.inspect_image(fake_image())
-    assert info["project"] == "cattoy_esp32"
-    assert info["built"] == "Oct  6 2026 12:34:56"
+    assert info["fw"] == "0.2.1"
+    assert info["built"] == "Oct 6 2026 12:34:56"  # ライブラリのビルド日時ではなく、スケッチの目印から読む
     assert info["md5"] == hashlib.md5(fake_image()).hexdigest()
+
+
+def test_inspect_image_rejects_foreign_firmware_unless_forced():
+    foreign = fake_image(tag=b"")
+    with pytest.raises(ValueError, match="cat-toy のファームウェアではありません"):
+        firmware.inspect_image(foreign)
+    assert firmware.inspect_image(foreign, allow_foreign=True)["fw"] == "不明"
 
 
 @pytest.mark.parametrize(

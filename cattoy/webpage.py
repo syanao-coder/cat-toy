@@ -206,7 +206,7 @@ $('fwBtn').onclick = () => {
   xhr.onload = () => {
     let r = {}; try { r = JSON.parse(xhr.responseText); } catch (e) {}
     $('fwMsg').textContent = xhr.status === 200
-      ? '書き換えました。ESP32 が再起動します（1 分ほどで上の版の表示が変わります）。\\n新しい版で Wi-Fi につながらない場合は、自動で前の版に戻ります。'
+      ? '版 ' + (r.fw || '?') + ' に書き換えました。ESP32 が再起動します（1 分ほどで上の版の表示が変わります）。\\n新しい版で Wi-Fi につながらない場合は、自動で前の版に戻ります。'
       : '失敗しました: ' + (r.error || xhr.status);
     $('fwBtn').disabled = false;
   };
