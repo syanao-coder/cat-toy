@@ -17,13 +17,12 @@ services:
       - TZ=Asia/Tokyo
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    cpus: 2                                    # 念のため CPU の使用量に上限を付ける
+    mem_limit: 2g
     deploy:
       resources:
-        limits:
-          cpus: "2"                            # 念のため CPU の使用量に上限を付ける
-          memory: 2g
         reservations:
-          devices:                             # GPU を使わないなら devices: 以下の 4 行を消す
+          devices:                             # GPU を使わないなら deploy: から下の 7 行を消す
             - driver: nvidia
               count: all
               capabilities: [gpu]
