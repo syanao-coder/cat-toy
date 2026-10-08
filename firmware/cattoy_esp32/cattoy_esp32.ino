@@ -64,7 +64,15 @@ extern "C" const char CATTOY_FW_TAG[] = "CATTOY_FW|" FW_VERSION "|" __DATE__ " "
 #define BUTTON_PIN 0   // 基板の BOOT ボタン（起動後は普通のボタンとして使える）
 #define RGB_LED_PIN 48 // 基板のフルカラー LED（状態表示）
 
-// GPIO35〜37 は N16R8 では PSRAM が使っているので使わないこと
+// 有線 LAN（W5500）用に予約（docs/hardware.md の「有線 LAN 用の口」）。ほかの用途に使わないこと
+#define ETH_SCK_PIN 41
+#define ETH_MOSI_PIN 42
+#define ETH_MISO_PIN 2
+#define ETH_CS_PIN 1
+#define ETH_INT_PIN 3
+
+// GPIO35〜37 は N16R8 では PSRAM が使っているので使わないこと。
+// GPIO38〜40 はボードの microSD、19・20 と 43・44 は USB-C、45・46 は起動モードを決めるピン
 
 #define SERVO_FREQ_HZ 50
 #define SERVO_RES_BITS 14
