@@ -43,7 +43,7 @@
 
 | 手順 | 内容 | 説明 |
 | --- | --- | --- |
-| 1. 部品をそろえて組み立てる | ESP32-S3 CAM・OV2640 120°・MG90S ×2・パン・チルト台・1mW レーザーなど | [docs/hardware.md](docs/hardware.md) |
+| 1. 部品をそろえて組み立てる | ESP32-S3 CAM・OV2640 120°・MG90S ×2・パン・チルト台・1mW レーザーなど | [docs/hardware.md](docs/hardware.md)（プリント基板にするなら [docs/pcb.md](docs/pcb.md)） |
 | 2. ESP32 に書き込む | Arduino IDE で `firmware/cattoy_esp32` を書き込む | [firmware/README.md](firmware/README.md) |
 | 3. NAS にアプリを作る | Container Station に [YAML](docker/qnap-app.yml) を貼り付ける（2 行だけ書き換え） | [docs/nas.md](docs/nas.md) の 1〜2 |
 | 4. 調整する | 操作画面で可動範囲の調整 → 位置合わせ（キャリブレーション） | [docs/nas.md](docs/nas.md) の 3 |
