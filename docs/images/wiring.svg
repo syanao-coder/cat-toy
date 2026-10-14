@@ -1,0 +1,299 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="1110" viewBox="0 0 1400 1110" font-family="'Hiragino Sans', 'Yu Gothic', Meiryo, 'Noto Sans CJK JP', 'IPAGothic', sans-serif">
+<rect width="1400" height="1110" fill="#ffffff"/>
+<text x="40" y="44" font-size="22" text-anchor="start" fill="#212121" font-weight="bold">カメラユニットの配線図（手配線用）</text>
+<text x="40" y="68" font-size="13" text-anchor="start" fill="#616161" font-weight="normal">ESP32 ボードを上から見た図。線は基板の裏で配線してよい</text>
+<rect x="560" y="150" width="280" height="590" rx="10" fill="#263238" stroke="#000" stroke-width="2"/>
+<rect x="660" y="166" width="80" height="150" rx="3" fill="#b0bec5" stroke="#78909c"/>
+<rect x="660" y="166" width="80" height="34" fill="#546e7a"/>
+<path d="M668,172 h64" stroke="#cfd8dc" stroke-width="1.5"/>
+<path d="M668,179 h64" stroke="#cfd8dc" stroke-width="1.5"/>
+<path d="M668,186 h64" stroke="#cfd8dc" stroke-width="1.5"/>
+<path d="M668,193 h64" stroke="#cfd8dc" stroke-width="1.5"/>
+<text x="700" y="260" font-size="11" text-anchor="middle" fill="#37474f" font-weight="bold">ESP32-S3</text>
+<text x="700" y="276" font-size="11" text-anchor="middle" fill="#37474f" font-weight="normal">モジュール</text>
+<text x="700" y="140" font-size="13" text-anchor="middle" fill="#455a64" font-weight="normal">アンテナ側</text>
+<text x="700" y="470" font-size="15" text-anchor="middle" fill="#eceff1" font-weight="bold">ESP32-S3 CAM</text>
+<text x="700" y="490" font-size="12" text-anchor="middle" fill="#b0bec5" font-weight="normal">（部品面）</text>
+<rect x="640" y="728" width="38" height="20" rx="6" fill="#9e9e9e" stroke="#616161"/>
+<rect x="722" y="728" width="38" height="20" rx="6" fill="#9e9e9e" stroke="#616161"/>
+<text x="700" y="776" font-size="13" text-anchor="middle" fill="#455a64" font-weight="normal">USB-C 側（ふさがない）</text>
+<circle cx="588" cy="180" r="6" fill="#ef6c00" stroke="#ef6c00" stroke-width="1.5"/>
+<text x="602" y="184" font-size="12" text-anchor="start" fill="#ffffff" font-weight="bold">3V3</text>
+<circle cx="588" cy="204" r="6" fill="#455a64" stroke="#90a4ae" stroke-width="1.5"/>
+<text x="602" y="208" font-size="12" text-anchor="start" fill="#78909c" font-weight="normal">3V3</text>
+<circle cx="588" cy="228" r="6" fill="#455a64" stroke="#90a4ae" stroke-width="1.5"/>
+<text x="602" y="232" font-size="12" text-anchor="start" fill="#78909c" font-weight="normal">RST</text>
+<circle cx="588" cy="252" r="6" fill="#455a64" stroke="#90a4ae" stroke-width="1.5"/>
+<text x="602" y="256" font-size="12" text-anchor="start" fill="#78909c" font-weight="normal">IO4</text>
+<circle cx="588" cy="276" r="6" fill="#455a64" stroke="#90a4ae" stroke-width="1.5"/>
+<text x="602" y="280" font-size="12" text-anchor="start" fill="#78909c" font-weight="normal">IO5</text>
+<circle cx="588" cy="300" r="6" fill="#455a64" stroke="#90a4ae" stroke-width="1.5"/>
+<text x="602" y="304" font-size="12" text-anchor="start" fill="#78909c" font-weight="normal">IO6</text>
+<circle cx="588" cy="324" r="6" fill="#455a64" stroke="#90a4ae" stroke-width="1.5"/>
+<text x="602" y="328" font-size="12" text-anchor="start" fill="#78909c" font-weight="normal">IO7</text>
+<circle cx="588" cy="348" r="6" fill="#455a64" stroke="#90a4ae" stroke-width="1.5"/>
+<text x="602" y="352" font-size="12" text-anchor="start" fill="#78909c" font-weight="normal">IO15</text>
+<circle cx="588" cy="372" r="6" fill="#455a64" stroke="#90a4ae" stroke-width="1.5"/>
+<text x="602" y="376" font-size="12" text-anchor="start" fill="#78909c" font-weight="normal">IO16</text>
+<circle cx="588" cy="396" r="6" fill="#455a64" stroke="#90a4ae" stroke-width="1.5"/>
+<text x="602" y="400" font-size="12" text-anchor="start" fill="#78909c" font-weight="normal">IO17</text>
+<circle cx="588" cy="420" r="6" fill="#455a64" stroke="#90a4ae" stroke-width="1.5"/>
+<text x="602" y="424" font-size="12" text-anchor="start" fill="#78909c" font-weight="normal">IO18</text>
+<circle cx="588" cy="444" r="6" fill="#455a64" stroke="#90a4ae" stroke-width="1.5"/>
+<text x="602" y="448" font-size="12" text-anchor="start" fill="#78909c" font-weight="normal">IO8</text>
+<circle cx="588" cy="468" r="6" fill="#1565c0" stroke="#1565c0" stroke-width="1.5"/>
+<text x="602" y="472" font-size="12" text-anchor="start" fill="#ffffff" font-weight="bold">IO3</text>
+<circle cx="588" cy="492" r="6" fill="#455a64" stroke="#90a4ae" stroke-width="1.5"/>
+<text x="602" y="496" font-size="12" text-anchor="start" fill="#78909c" font-weight="normal">IO46</text>
+<circle cx="588" cy="516" r="6" fill="#455a64" stroke="#90a4ae" stroke-width="1.5"/>
+<text x="602" y="520" font-size="12" text-anchor="start" fill="#78909c" font-weight="normal">IO9</text>
+<circle cx="588" cy="540" r="6" fill="#455a64" stroke="#90a4ae" stroke-width="1.5"/>
+<text x="602" y="544" font-size="12" text-anchor="start" fill="#78909c" font-weight="normal">IO10</text>
+<circle cx="588" cy="564" r="6" fill="#455a64" stroke="#90a4ae" stroke-width="1.5"/>
+<text x="602" y="568" font-size="12" text-anchor="start" fill="#78909c" font-weight="normal">IO11</text>
+<circle cx="588" cy="588" r="6" fill="#455a64" stroke="#90a4ae" stroke-width="1.5"/>
+<text x="602" y="592" font-size="12" text-anchor="start" fill="#78909c" font-weight="normal">IO12</text>
+<circle cx="588" cy="612" r="6" fill="#455a64" stroke="#90a4ae" stroke-width="1.5"/>
+<text x="602" y="616" font-size="12" text-anchor="start" fill="#78909c" font-weight="normal">IO13</text>
+<circle cx="588" cy="636" r="6" fill="#2e7d32" stroke="#2e7d32" stroke-width="1.5"/>
+<text x="602" y="640" font-size="12" text-anchor="start" fill="#ffffff" font-weight="bold">IO14</text>
+<circle cx="588" cy="660" r="6" fill="#d32f2f" stroke="#d32f2f" stroke-width="1.5"/>
+<text x="602" y="664" font-size="12" text-anchor="start" fill="#ffffff" font-weight="bold">5V</text>
+<circle cx="588" cy="684" r="6" fill="#212121" stroke="#212121" stroke-width="1.5"/>
+<text x="602" y="688" font-size="12" text-anchor="start" fill="#ffffff" font-weight="bold">GND</text>
+<circle cx="812" cy="180" r="6" fill="#455a64" stroke="#90a4ae" stroke-width="1.5"/>
+<text x="798" y="184" font-size="12" text-anchor="end" fill="#78909c" font-weight="normal">GND</text>
+<circle cx="812" cy="204" r="6" fill="#455a64" stroke="#90a4ae" stroke-width="1.5"/>
+<text x="798" y="208" font-size="12" text-anchor="end" fill="#78909c" font-weight="normal">TX</text>
+<circle cx="812" cy="228" r="6" fill="#455a64" stroke="#90a4ae" stroke-width="1.5"/>
+<text x="798" y="232" font-size="12" text-anchor="end" fill="#78909c" font-weight="normal">RX</text>
+<circle cx="812" cy="252" r="6" fill="#1565c0" stroke="#1565c0" stroke-width="1.5"/>
+<text x="798" y="256" font-size="12" text-anchor="end" fill="#ffffff" font-weight="bold">IO1</text>
+<circle cx="812" cy="276" r="6" fill="#1565c0" stroke="#1565c0" stroke-width="1.5"/>
+<text x="798" y="280" font-size="12" text-anchor="end" fill="#ffffff" font-weight="bold">IO2</text>
+<circle cx="812" cy="300" r="6" fill="#1565c0" stroke="#1565c0" stroke-width="1.5"/>
+<text x="798" y="304" font-size="12" text-anchor="end" fill="#ffffff" font-weight="bold">IO42</text>
+<circle cx="812" cy="324" r="6" fill="#1565c0" stroke="#1565c0" stroke-width="1.5"/>
+<text x="798" y="328" font-size="12" text-anchor="end" fill="#ffffff" font-weight="bold">IO41</text>
+<circle cx="812" cy="348" r="6" fill="#455a64" stroke="#90a4ae" stroke-width="1.5"/>
+<text x="798" y="352" font-size="12" text-anchor="end" fill="#78909c" font-weight="normal">IO40</text>
+<circle cx="812" cy="372" r="6" fill="#455a64" stroke="#90a4ae" stroke-width="1.5"/>
+<text x="798" y="376" font-size="12" text-anchor="end" fill="#78909c" font-weight="normal">IO39</text>
+<circle cx="812" cy="396" r="6" fill="#455a64" stroke="#90a4ae" stroke-width="1.5"/>
+<text x="798" y="400" font-size="12" text-anchor="end" fill="#78909c" font-weight="normal">IO38</text>
+<circle cx="812" cy="420" r="6" fill="#455a64" stroke="#90a4ae" stroke-width="1.5"/>
+<text x="798" y="424" font-size="12" text-anchor="end" fill="#78909c" font-weight="normal">IO37</text>
+<circle cx="812" cy="444" r="6" fill="#455a64" stroke="#90a4ae" stroke-width="1.5"/>
+<text x="798" y="448" font-size="12" text-anchor="end" fill="#78909c" font-weight="normal">IO36</text>
+<circle cx="812" cy="468" r="6" fill="#455a64" stroke="#90a4ae" stroke-width="1.5"/>
+<text x="798" y="472" font-size="12" text-anchor="end" fill="#78909c" font-weight="normal">IO35</text>
+<circle cx="812" cy="492" r="6" fill="#455a64" stroke="#90a4ae" stroke-width="1.5"/>
+<text x="798" y="496" font-size="12" text-anchor="end" fill="#78909c" font-weight="normal">IO0</text>
+<circle cx="812" cy="516" r="6" fill="#455a64" stroke="#90a4ae" stroke-width="1.5"/>
+<text x="798" y="520" font-size="12" text-anchor="end" fill="#78909c" font-weight="normal">IO45</text>
+<circle cx="812" cy="540" r="6" fill="#455a64" stroke="#90a4ae" stroke-width="1.5"/>
+<text x="798" y="544" font-size="12" text-anchor="end" fill="#78909c" font-weight="normal">IO48</text>
+<circle cx="812" cy="564" r="6" fill="#7b1fa2" stroke="#7b1fa2" stroke-width="1.5"/>
+<text x="798" y="568" font-size="12" text-anchor="end" fill="#ffffff" font-weight="bold">IO47</text>
+<circle cx="812" cy="588" r="6" fill="#2e7d32" stroke="#2e7d32" stroke-width="1.5"/>
+<text x="798" y="592" font-size="12" text-anchor="end" fill="#ffffff" font-weight="bold">IO21</text>
+<circle cx="812" cy="612" r="6" fill="#455a64" stroke="#90a4ae" stroke-width="1.5"/>
+<text x="798" y="616" font-size="12" text-anchor="end" fill="#78909c" font-weight="normal">IO20</text>
+<circle cx="812" cy="636" r="6" fill="#455a64" stroke="#90a4ae" stroke-width="1.5"/>
+<text x="798" y="640" font-size="12" text-anchor="end" fill="#78909c" font-weight="normal">IO19</text>
+<circle cx="812" cy="660" r="6" fill="#455a64" stroke="#90a4ae" stroke-width="1.5"/>
+<text x="798" y="664" font-size="12" text-anchor="end" fill="#78909c" font-weight="normal">GND</text>
+<circle cx="812" cy="684" r="6" fill="#455a64" stroke="#90a4ae" stroke-width="1.5"/>
+<text x="798" y="688" font-size="12" text-anchor="end" fill="#78909c" font-weight="normal">GND</text>
+<path d="M60,820 L1350,820" fill="none" stroke="#212121" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M60,860 L1330,860" fill="none" stroke="#d32f2f" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="70" y="812" font-size="12" text-anchor="start" fill="#212121" font-weight="bold">GND の線（黒）</text>
+<text x="70" y="852" font-size="12" text-anchor="start" fill="#d32f2f" font-weight="bold">5V の線（赤）</text>
+<rect x="18" y="802" width="40" height="76" rx="4" fill="#2e7d32" stroke="#1b5e20" stroke-width="2"/>
+<circle cx="38" cy="820" r="9" fill="#cfd8dc" stroke="#455a64" stroke-width="2"/>
+<path d="M32,820 h12" stroke="#455a64" stroke-width="2"/>
+<text x="8" y="825" font-size="15" text-anchor="middle" fill="#212121" font-weight="bold">−</text>
+<circle cx="38" cy="860" r="9" fill="#cfd8dc" stroke="#455a64" stroke-width="2"/>
+<path d="M32,860 h12" stroke="#455a64" stroke-width="2"/>
+<text x="8" y="865" font-size="15" text-anchor="middle" fill="#212121" font-weight="bold">＋</text>
+<text x="18" y="795" font-size="12" text-anchor="start" fill="#212121" font-weight="bold">J3 5V 入力（端子台）</text>
+<text x="18" y="900" font-size="12" text-anchor="start" fill="#616161" font-weight="normal">↑ AC アダプター（5V 2A 以上）か PoE スプリッターの 5V をつなぐ</text>
+<path d="M588,660 L500,660 L500,814 A6,6 0 0 1 500,826 L500,860" fill="none" stroke="#d32f2f" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="500" cy="860" r="5" fill="#d32f2f"/>
+<path d="M588,684 L520,684 L520,820" fill="none" stroke="#212121" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="520" cy="820" r="5" fill="#212121"/>
+<rect x="212" y="700" width="40" height="70" rx="6" fill="#283593" stroke="#1a237e" stroke-width="2"/>
+<rect x="212" y="700" width="12" height="70" fill="#9fa8da"/>
+<text x="218" y="740" font-size="14" text-anchor="middle" fill="#1a237e" font-weight="bold">−</text>
+<path d="M222,770 L222,820" fill="none" stroke="#212121" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="222" cy="820" r="5" fill="#212121"/>
+<path d="M244,770 L244,814 A6,6 0 0 1 244,826 L244,860" fill="none" stroke="#d32f2f" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="244" cy="860" r="5" fill="#d32f2f"/>
+<text x="232" y="672" font-size="12" text-anchor="middle" fill="#212121" font-weight="bold">C1 電解コンデンサ</text>
+<text x="232" y="690" font-size="12" text-anchor="middle" fill="#212121" font-weight="normal">470〜1000µF（帯の側が −）</text>
+<rect x="350" y="606" width="110" height="64" rx="6" fill="#1e88e5" stroke="#0d47a1" stroke-width="2"/>
+<ellipse cx="380" cy="600" rx="22" ry="7" fill="#fafafa" stroke="#9e9e9e"/>
+<text x="405" y="634" font-size="13" text-anchor="middle" fill="#ffffff" font-weight="bold">パン用サーボ</text>
+<text x="405" y="652" font-size="12" text-anchor="middle" fill="#e3f2fd" font-weight="normal">MG90S</text>
+<path d="M380,670 L380,712" fill="none" stroke="#795548" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M404,670 L404,712" fill="none" stroke="#d32f2f" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M428,670 L428,712" fill="none" stroke="#fb8c00" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<rect x="368" y="712" width="72" height="16" rx="2" fill="#263238"/>
+<circle cx="380" cy="720" r="3.5" fill="#ffd54f"/>
+<circle cx="404" cy="720" r="3.5" fill="#ffd54f"/>
+<circle cx="428" cy="720" r="3.5" fill="#ffd54f"/>
+<text x="362" y="724" font-size="13" text-anchor="end" fill="#212121" font-weight="bold">J4</text>
+<text x="380" y="746" font-size="11" text-anchor="middle" fill="#795548" font-weight="normal">茶</text>
+<text x="404" y="746" font-size="11" text-anchor="middle" fill="#d32f2f" font-weight="normal">赤</text>
+<text x="428" y="746" font-size="11" text-anchor="middle" fill="#fb8c00" font-weight="normal">橙</text>
+<path d="M380,728 L380,740" fill="none" stroke="#212121" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M380,752 L380,820" fill="none" stroke="#212121" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="380" cy="820" r="5" fill="#212121"/>
+<path d="M404,728 L404,740" fill="none" stroke="#d32f2f" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M404,752 L404,814 A6,6 0 0 1 404,826 L404,860" fill="none" stroke="#d32f2f" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="404" cy="860" r="5" fill="#d32f2f"/>
+<path d="M428,728 L428,740" fill="none" stroke="#2e7d32" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M428,752 L428,770 L470,770 L470,636 L588,636" fill="none" stroke="#2e7d32" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="476" y="628" font-size="12" text-anchor="start" fill="#2e7d32" font-weight="bold">IO14 → パン</text>
+<rect x="900" y="616" width="110" height="64" rx="6" fill="#1e88e5" stroke="#0d47a1" stroke-width="2"/>
+<ellipse cx="980" cy="610" rx="22" ry="7" fill="#fafafa" stroke="#9e9e9e"/>
+<text x="955" y="644" font-size="13" text-anchor="middle" fill="#ffffff" font-weight="bold">チルト用サーボ</text>
+<text x="955" y="662" font-size="12" text-anchor="middle" fill="#e3f2fd" font-weight="normal">MG90S</text>
+<path d="M930,680 L930,712" fill="none" stroke="#fb8c00" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M954,680 L954,712" fill="none" stroke="#d32f2f" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M978,680 L978,712" fill="none" stroke="#795548" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<rect x="918" y="712" width="72" height="16" rx="2" fill="#263238"/>
+<circle cx="930" cy="720" r="3.5" fill="#ffd54f"/>
+<circle cx="954" cy="720" r="3.5" fill="#ffd54f"/>
+<circle cx="978" cy="720" r="3.5" fill="#ffd54f"/>
+<text x="996" y="724" font-size="13" text-anchor="start" fill="#212121" font-weight="bold">J5</text>
+<text x="930" y="746" font-size="11" text-anchor="middle" fill="#fb8c00" font-weight="normal">橙</text>
+<text x="954" y="746" font-size="11" text-anchor="middle" fill="#d32f2f" font-weight="normal">赤</text>
+<text x="978" y="746" font-size="11" text-anchor="middle" fill="#795548" font-weight="normal">茶</text>
+<path d="M930,728 L930,740" fill="none" stroke="#2e7d32" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M930,752 L930,770 L860,770 L860,588 L812,588" fill="none" stroke="#2e7d32" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="866" y="608" font-size="12" text-anchor="start" fill="#2e7d32" font-weight="bold">IO21 → チルト</text>
+<path d="M954,728 L954,740" fill="none" stroke="#d32f2f" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M954,752 L954,814 A6,6 0 0 1 954,826 L954,860" fill="none" stroke="#d32f2f" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="954" cy="860" r="5" fill="#d32f2f"/>
+<path d="M978,728 L978,740" fill="none" stroke="#212121" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M978,752 L978,820" fill="none" stroke="#212121" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="978" cy="820" r="5" fill="#212121"/>
+<path d="M812,564 L1010,564" fill="none" stroke="#7b1fa2" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="826" y="556" font-size="12" text-anchor="start" fill="#7b1fa2" font-weight="bold">IO47 → レーザー</text>
+<rect x="1010" y="556" width="48" height="16" rx="4" fill="#f5e6c8" stroke="#8d6e63" stroke-width="1.5"/>
+<rect x="1020" y="556" width="4" height="16" fill="#795548"/>
+<rect x="1028" y="556" width="4" height="16" fill="#212121"/>
+<rect x="1036" y="556" width="4" height="16" fill="#d32f2f"/>
+<text x="1034.0" y="550" font-size="12" text-anchor="middle" fill="#7b1fa2" font-weight="normal">R1 1kΩ</text>
+<path d="M1058,564 L1132,564" fill="none" stroke="#7b1fa2" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="1090" cy="564" r="5" fill="#7b1fa2"/>
+<rect x="1082" y="620" width="16" height="56" rx="4" fill="#f5e6c8" stroke="#8d6e63" stroke-width="1.5"/>
+<rect x="1082" y="630" width="16" height="4" fill="#795548"/>
+<rect x="1082" y="638" width="16" height="4" fill="#212121"/>
+<rect x="1082" y="646" width="16" height="4" fill="#ff9800"/>
+<text x="1076" y="652.0" font-size="12" text-anchor="end" fill="#212121" font-weight="normal">R2 10kΩ</text>
+<path d="M1090,564 L1090,620" fill="none" stroke="#7b1fa2" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M1090,676 L1090,820" fill="none" stroke="#212121" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="1090" cy="820" r="5" fill="#212121"/>
+<circle cx="1152" cy="564" r="26" fill="#fafafa" stroke="#424242" stroke-width="2"/>
+<path d="M1138,550 v28" stroke="#212121" stroke-width="3"/>
+<path d="M1138,558 L1162,542 M1138,570 L1162,586" stroke="#212121" stroke-width="2.5"/>
+<path d="M1162,586 l-10,-1 l5,-7 z" fill="#212121"/>
+<path d="M1162,542 L1162,486" fill="none" stroke="#212121" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M1162,586 L1162,820" fill="none" stroke="#212121" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="1162" cy="820" r="5" fill="#212121"/>
+<text x="1128" y="554" font-size="12" text-anchor="end" fill="#424242" font-weight="bold">B</text>
+<text x="1170" y="534" font-size="12" text-anchor="start" fill="#424242" font-weight="bold">C</text>
+<text x="1170" y="604" font-size="12" text-anchor="start" fill="#424242" font-weight="bold">E</text>
+<text x="1186" y="570" font-size="13" text-anchor="start" fill="#212121" font-weight="bold">Q1 2SC1815</text>
+<rect x="1216" y="372" width="36" height="84" rx="5" fill="#d4a017" stroke="#8d6e00" stroke-width="2"/>
+<rect x="1220" y="366" width="28" height="10" rx="2" fill="#bdbdbd"/>
+<path d="M1234,362 V310" stroke="#d32f2f" stroke-width="3" stroke-dasharray="6 5"/>
+<text x="1262" y="400" font-size="13" text-anchor="start" fill="#212121" font-weight="bold">レーザー</text>
+<text x="1262" y="418" font-size="12" text-anchor="start" fill="#212121" font-weight="normal">（1mW 以下）</text>
+<path d="M1228,456 L1228,486 L1162,486" fill="none" stroke="#212121" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="1206" y="500" font-size="11" text-anchor="end" fill="#212121" font-weight="normal">−（黒）</text>
+<path d="M1242,456 L1242,470 L1310,470 L1310,814 A6,6 0 0 1 1310,826 L1310,860" fill="none" stroke="#d32f2f" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="1310" cy="860" r="5" fill="#d32f2f"/>
+<text x="1264" y="466" font-size="11" text-anchor="start" fill="#d32f2f" font-weight="normal">＋（赤）</text>
+<path d="M588,180 L588,28 L1140,28 L1140,96" fill="none" stroke="#ef6c00" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="600" y="20" font-size="12" text-anchor="start" fill="#ef6c00" font-weight="bold">3.3V の線（橙）</text>
+<path d="M588,468 L540,468 L540,50 L582,50 A6,6 0 0 1 594,50 L900,50 L900,96" fill="none" stroke="#1565c0" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="640" y="45" font-size="12" text-anchor="start" fill="#1565c0" font-weight="bold">IO3 → INT</text>
+<rect x="932" y="40" width="16" height="44" rx="4" fill="#f5e6c8" stroke="#8d6e63" stroke-width="1.5"/>
+<rect x="932" y="50" width="16" height="4" fill="#795548"/>
+<rect x="932" y="58" width="16" height="4" fill="#212121"/>
+<rect x="932" y="66" width="16" height="4" fill="#ff9800"/>
+<text x="926" y="66.0" font-size="12" text-anchor="end" fill="#ef6c00" font-weight="normal"></text>
+<path d="M940,28 L940,40" fill="none" stroke="#ef6c00" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M940,84 L940,96" fill="none" stroke="#1565c0" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="940" cy="28" r="5" fill="#ef6c00"/>
+<text x="954" y="66" font-size="12" text-anchor="start" fill="#ef6c00" font-weight="normal">R3 10kΩ</text>
+<path d="M812,252 L940,252 L940,130" fill="none" stroke="#1565c0" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M812,276 L980,276 L980,130" fill="none" stroke="#1565c0" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M812,300 L1020,300 L1020,130" fill="none" stroke="#1565c0" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M812,324 L1060,324 L1060,130" fill="none" stroke="#1565c0" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M1100,130 L1100,200 L1330,200 L1330,814 A6,6 0 0 1 1330,826 L1330,860" fill="none" stroke="#d32f2f" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M1180,130 L1180,176 L1350,176 L1350,820" fill="none" stroke="#212121" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<rect x="876" y="96" width="328" height="34" rx="3" fill="#212121"/>
+<text x="900" y="110" font-size="10" text-anchor="middle" fill="#bdbdbd" font-weight="normal">8</text>
+<text x="900" y="124" font-size="10" text-anchor="middle" fill="#ffffff" font-weight="bold">INT</text>
+<text x="940" y="110" font-size="10" text-anchor="middle" fill="#bdbdbd" font-weight="normal">7</text>
+<text x="940" y="124" font-size="10" text-anchor="middle" fill="#ffffff" font-weight="bold">CS</text>
+<text x="980" y="110" font-size="10" text-anchor="middle" fill="#bdbdbd" font-weight="normal">6</text>
+<text x="980" y="124" font-size="10" text-anchor="middle" fill="#ffffff" font-weight="bold">MISO</text>
+<text x="1020" y="110" font-size="10" text-anchor="middle" fill="#bdbdbd" font-weight="normal">5</text>
+<text x="1020" y="124" font-size="10" text-anchor="middle" fill="#ffffff" font-weight="bold">MOSI</text>
+<text x="1060" y="110" font-size="10" text-anchor="middle" fill="#bdbdbd" font-weight="normal">4</text>
+<text x="1060" y="124" font-size="10" text-anchor="middle" fill="#ffffff" font-weight="bold">SCK</text>
+<text x="1100" y="110" font-size="10" text-anchor="middle" fill="#bdbdbd" font-weight="normal">3</text>
+<text x="1100" y="124" font-size="10" text-anchor="middle" fill="#ffffff" font-weight="bold">5V</text>
+<text x="1140" y="110" font-size="10" text-anchor="middle" fill="#bdbdbd" font-weight="normal">2</text>
+<text x="1140" y="124" font-size="10" text-anchor="middle" fill="#ffffff" font-weight="bold">3V3</text>
+<text x="1180" y="110" font-size="10" text-anchor="middle" fill="#bdbdbd" font-weight="normal">1</text>
+<text x="1180" y="124" font-size="10" text-anchor="middle" fill="#ffffff" font-weight="bold">GND</text>
+<text x="1214" y="112" font-size="13" text-anchor="start" fill="#212121" font-weight="bold">J7 有線 LAN 用の口</text>
+<text x="1214" y="130" font-size="11" text-anchor="start" fill="#616161" font-weight="normal">（1×8 メス。W5500 用）</text>
+<line x1="20" y1="918" x2="1380" y2="918" stroke="#e0e0e0" stroke-width="2"/>
+<text x="40" y="946" font-size="14" text-anchor="start" fill="#212121" font-weight="bold">線の色</text>
+<path d="M40,970 L76,970" fill="none" stroke="#d32f2f" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="86" y="975" font-size="13" text-anchor="start" fill="#212121" font-weight="normal">5V</text>
+<path d="M230,970 L266,970" fill="none" stroke="#212121" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="276" y="975" font-size="13" text-anchor="start" fill="#212121" font-weight="normal">GND</text>
+<path d="M40,996 L76,996" fill="none" stroke="#ef6c00" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="86" y="1001" font-size="13" text-anchor="start" fill="#212121" font-weight="normal">3.3V</text>
+<path d="M230,996 L266,996" fill="none" stroke="#2e7d32" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="276" y="1001" font-size="13" text-anchor="start" fill="#212121" font-weight="normal">サーボの信号</text>
+<path d="M40,1022 L76,1022" fill="none" stroke="#7b1fa2" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="86" y="1027" font-size="13" text-anchor="start" fill="#212121" font-weight="normal">レーザーの信号</text>
+<path d="M230,1022 L266,1022" fill="none" stroke="#1565c0" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="276" y="1027" font-size="13" text-anchor="start" fill="#212121" font-weight="normal">有線 LAN の信号</text>
+<circle cx="48" cy="1054" r="5" fill="#212121"/>
+<text x="62" y="1059" font-size="13" text-anchor="start" fill="#212121" font-weight="normal">つながっている所</text>
+<path d="M210,1054 L215,1054 A6,6 0 0 1 227,1054 L232,1054" fill="none" stroke="#212121" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M221,1044 v20" stroke="#9e9e9e" stroke-width="3"/>
+<text x="242" y="1059" font-size="13" text-anchor="start" fill="#212121" font-weight="normal">交差しているだけ（つながない）</text>
+<text x="500" y="946" font-size="14" text-anchor="start" fill="#212121" font-weight="bold">2SC1815 の足</text>
+<path d="M520,1000 v-28 a28,28 0 0 1 56,0 v28 z" fill="#424242"/>
+<text x="548" y="990" font-size="10" text-anchor="middle" fill="#e0e0e0" font-weight="normal">C1815</text>
+<rect x="528.5" y="1000" width="3" height="34" fill="#9e9e9e"/>
+<text x="530" y="1050" font-size="13" text-anchor="middle" fill="#212121" font-weight="bold">E</text>
+<rect x="546.5" y="1000" width="3" height="34" fill="#9e9e9e"/>
+<text x="548" y="1050" font-size="13" text-anchor="middle" fill="#212121" font-weight="bold">C</text>
+<rect x="564.5" y="1000" width="3" height="34" fill="#9e9e9e"/>
+<text x="566" y="1050" font-size="13" text-anchor="middle" fill="#212121" font-weight="bold">B</text>
+<text x="600" y="976" font-size="12" text-anchor="start" fill="#212121" font-weight="normal">文字の書いてある平らな面を</text>
+<text x="600" y="994" font-size="12" text-anchor="start" fill="#212121" font-weight="normal">手前に、足を下にして見たとき</text>
+<text x="600" y="1012" font-size="12" text-anchor="start" fill="#212121" font-weight="bold">左から E・C・B</text>
+<text x="600" y="1036" font-size="12" text-anchor="start" fill="#212121" font-weight="normal">E＝GND、C＝レーザーの −、</text>
+<text x="600" y="1054" font-size="12" text-anchor="start" fill="#212121" font-weight="normal">B＝R1 と R2</text>
+<text x="860" y="946" font-size="14" text-anchor="start" fill="#212121" font-weight="bold">注意</text>
+<text x="860" y="972" font-size="12" text-anchor="start" fill="#b71c1c" font-weight="bold">ボードのピンの並びは想定（ESP32-S3-DevKitC-1 互換）です。</text>
+<text x="860" y="991" font-size="12" text-anchor="start" fill="#b71c1c" font-weight="bold">届いたボードの印字と必ず見比べてください。</text>
+<text x="860" y="1010" font-size="12" text-anchor="start" fill="#212121" font-weight="normal">灰色のピンには何もつなぎません。</text>
+<text x="860" y="1029" font-size="12" text-anchor="start" fill="#212121" font-weight="normal">J7 は W5500 を後から挿すための口です。今は付けておくだけで構いません。</text>
+<text x="860" y="1048" font-size="12" text-anchor="start" fill="#212121" font-weight="normal">レーザーの＋は定格に合わせて 5V か 3.3V へ（3V 用なら 3.3V）。</text>
+<text x="860" y="1067" font-size="12" text-anchor="start" fill="#212121" font-weight="normal">サーボの電源をボードの 3V3 や USB-C から取らないこと。</text>
+<text x="860" y="1086" font-size="12" text-anchor="start" fill="#212121" font-weight="normal">書き込み（USB）のときは 5V 入力を外す。</text>
+</svg>
