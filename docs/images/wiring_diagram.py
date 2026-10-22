@@ -2,8 +2,8 @@
 
   python docs/images/wiring_diagram.py      → docs/images/wiring.svg を書き出す
 
-ESP32 ボードのピンの並びは pcb/check_netlist.py と同じ（ESP32-S3-DevKitC-1 互換の想定）。
-届いたボードの並びが違ったら、LEFT / RIGHT を直して作り直す（配線の道筋も合わせて直す必要がある）。
+ESP32 ボードのピンの並びは pcb/check_netlist.py と同じ（届いたボードの印字から読み取ったもの）。
+並びを変えたら、配線の道筋も合わせて直す必要がある。PNG にするのは render.py。
 """
 
 from __future__ import annotations
@@ -12,10 +12,10 @@ from pathlib import Path
 
 W, H = 1400, 1110
 
-LEFT = ["3V3", "3V3", "RST", "IO4", "IO5", "IO6", "IO7", "IO15", "IO16", "IO17", "IO18",
-        "IO8", "IO3", "IO46", "IO9", "IO10", "IO11", "IO12", "IO13", "IO14", "5V", "GND"]
-RIGHT = ["GND", "TX", "RX", "IO1", "IO2", "IO42", "IO41", "IO40", "IO39", "IO38", "IO37",
-         "IO36", "IO35", "IO0", "IO45", "IO48", "IO47", "IO21", "IO20", "IO19", "GND", "GND"]
+LEFT = ["3V3", "EN", "IO4", "IO5", "IO6", "IO7", "IO15", "IO16", "IO17", "IO18",
+        "IO8", "IO3", "IO46", "IO9", "IO10", "IO11", "IO12", "IO13", "IO14", "5V"]
+RIGHT = ["TX", "RX", "IO1", "IO2", "IO42", "IO41", "IO40", "IO39", "IO38", "IO37",
+         "IO36", "IO35", "IO0", "IO45", "IO48", "IO47", "IO21", "IO20", "IO19", "GND"]
 
 # 線の色
 C5V, CGND, C33 = "#d32f2f", "#212121", "#ef6c00"
@@ -26,10 +26,10 @@ BROWN, ORANGE = "#795548", "#fb8c00"
 BX0, BX1, BY0, BY1 = 560, 840, 150, 740
 PX_L, PX_R = 588, 812
 def row_y(n: int) -> int:  # 1 始まり
-    return 180 + 24 * (n - 1)
+    return 180 + 26 * (n - 1)
 
-USED_L = {1: C33, 13: CLAN, 20: CSERVO, 21: C5V, 22: CGND}
-USED_R = {4: CLAN, 5: CLAN, 6: CLAN, 7: CLAN, 17: CLASER, 18: CSERVO}
+USED_L = {1: C33, 12: CLAN, 19: CSERVO, 20: C5V}
+USED_R = {3: CLAN, 4: CLAN, 5: CLAN, 6: CLAN, 16: CLASER, 17: CSERVO, 20: CGND}
 
 Y_33, Y_GND, Y_5V = 28, 820, 860  # 3.3V・GND・5V の線（レール）
 HOP = 6
@@ -114,8 +114,8 @@ for i in range(4):
 text(700, 260, "ESP32-S3", 11, "middle", "#37474f", "bold")
 text(700, 276, "モジュール", 11, "middle", "#37474f")
 text(700, 140, "アンテナ側", 13, "middle", "#455a64")
-text(700, 470, "ESP32-S3 CAM", 15, "middle", "#eceff1", "bold")
-text(700, 490, "（部品面）", 12, "middle", "#b0bec5")
+text(700, 470, "ESP32-S3 WROOM", 15, "middle", "#eceff1", "bold")
+text(700, 490, "N16R8 CAM（部品面）", 12, "middle", "#b0bec5")
 for ux in (640, 722):
     add(f'<rect x="{ux}" y="728" width="38" height="20" rx="6" fill="#9e9e9e" stroke="#616161"/>')
 text(700, 776, "USB-C 側（ふさがない）", 13, "middle", "#455a64")
@@ -133,7 +133,7 @@ for i, name in enumerate(RIGHT, 1):
 
 # ------------------------------------------------------------------ 5V・GND の線（レール）と入力端子
 wire([(60, Y_GND), (1350, Y_GND)], CGND, 5)
-wire([(60, Y_5V), (1330, Y_5V)], C5V, 5)
+wire([(60, Y_5V), (1310, Y_5V)], C5V, 5)
 text(70, Y_GND - 8, "GND の線（黒）", 12, color=CGND, weight="bold")
 text(70, Y_5V - 8, "5V の線（赤）", 12, color=C5V, weight="bold")
 add('<rect x="18" y="802" width="40" height="76" rx="4" fill="#2e7d32" stroke="#1b5e20" stroke-width="2"/>')
@@ -145,10 +145,10 @@ text(18, 795, "J3 5V 入力（端子台）", 12, weight="bold")
 text(18, 900, "↑ AC アダプター（5V 2A 以上）か PoE スプリッターの 5V をつなぐ", 12, color="#616161")
 
 # ボードの 5V・GND
-wire([(PX_L, row_y(21)), (500, row_y(21)), (500, Y_5V)], C5V, hops=[(500, Y_GND)])
+wire([(PX_L, row_y(20)), (500, row_y(20)), (500, Y_5V)], C5V, hops=[(500, Y_GND)])
 dot(500, Y_5V, C5V)
-wire([(PX_L, row_y(22)), (520, row_y(22)), (520, Y_GND)], CGND)
-dot(520, Y_GND, CGND)
+wire([(PX_R, row_y(20)), (850, row_y(20)), (850, Y_GND)], CGND)
+dot(850, Y_GND, CGND)
 
 # C1
 add('<rect x="212" y="700" width="40" height="70" rx="6" fill="#283593" stroke="#1a237e" stroke-width="2"/>')
@@ -174,18 +174,18 @@ wire([(404, 728), (404, 740)], C5V)
 wire([(404, 752), (404, Y_5V)], C5V, hops=[(404, Y_GND)])
 dot(404, Y_5V, C5V)
 wire([(428, 728), (428, 740)], CSERVO)
-wire([(428, 752), (428, 770), (470, 770), (470, row_y(20)), (PX_L, row_y(20))], CSERVO)
-text(476, row_y(20) - 8, "IO14 → パン", 12, color=CSERVO, weight="bold")
+wire([(428, 752), (428, 770), (470, 770), (470, row_y(19)), (PX_L, row_y(19))], CSERVO)
+text(476, row_y(19) - 8, "IO14 → パン", 12, color=CSERVO, weight="bold")
 
 # ------------------------------------------------------------------ チルト用サーボ（J5）
-servo(900, 616, "チルト用サーボ", (930, 954, 978), 720, (ORANGE, C5V, BROWN), horn_dx=80)
+servo(900, 616, "チルト用サーボ", (930, 954, 978), 720, (ORANGE, C5V, BROWN), horn_dx=102)
 text(996, 724, "J5", 13, weight="bold")
 text(930, 746, "橙", 11, "middle", ORANGE)
 text(954, 746, "赤", 11, "middle", C5V)
 text(978, 746, "茶", 11, "middle", BROWN)
 wire([(930, 728), (930, 740)], CSERVO)
-wire([(930, 752), (930, 770), (860, 770), (860, row_y(18)), (PX_R, row_y(18))], CSERVO)
-text(866, row_y(18) + 20, "IO21 → チルト", 12, color=CSERVO, weight="bold")
+wire([(930, 752), (930, 770), (870, 770), (870, row_y(17)), (PX_R, row_y(17))], CSERVO)
+text(878, row_y(17) + 20, "IO21 → チルト", 12, color=CSERVO, weight="bold")
 wire([(954, 728), (954, 740)], C5V)
 wire([(954, 752), (954, Y_5V)], C5V, hops=[(954, Y_GND)])
 dot(954, Y_5V, C5V)
@@ -194,9 +194,9 @@ wire([(978, 752), (978, Y_GND)], CGND)
 dot(978, Y_GND, CGND)
 
 # ------------------------------------------------------------------ レーザー（Q1・R1・R2）
-YL = row_y(17)
+YL = row_y(16)
 wire([(PX_R, YL), (1010, YL)], CLASER)
-text(826, YL - 8, "IO47 → レーザー", 12, color=CLASER, weight="bold")
+text(848, YL - 8, "IO47 → レーザー", 12, color=CLASER, weight="bold")
 resistor_h(1010, 1058, YL, "R1 1kΩ", CLASER)
 wire([(1058, YL), (1132, YL)], CLASER)
 dot(1090, YL, CLASER)
@@ -219,7 +219,7 @@ text(1186, YL + 6, "Q1 2SC1815", 13, weight="bold")
 # レーザーのモジュール
 add('<rect x="1216" y="372" width="36" height="84" rx="5" fill="#d4a017" stroke="#8d6e00" stroke-width="2"/>')
 add('<rect x="1220" y="366" width="28" height="10" rx="2" fill="#bdbdbd"/>')
-add(f'<path d="M1234,362 V310" stroke="{C5V}" stroke-width="3" stroke-dasharray="6 5"/>')
+add(f'<path d="M1234,362 V334" stroke="{C5V}" stroke-width="3" stroke-dasharray="6 5"/>')
 text(1262, 400, "レーザー", 13, weight="bold")
 text(1262, 418, "（1mW 以下）", 12)
 wire([(1228, 456), (1228, 486), (1162, 486)], CGND)
@@ -228,33 +228,61 @@ wire([(1242, 456), (1242, 470), (1310, 470), (1310, Y_5V)], C5V, hops=[(1310, Y_
 dot(1310, Y_5V, C5V)
 text(1264, 466, "＋（赤）", 11, color=C5V)
 
-# ------------------------------------------------------------------ 3.3V と有線 LAN 用の口（J7）
-J7X = {8: 900, 7: 940, 6: 980, 5: 1020, 4: 1060, 3: 1100, 2: 1140, 1: 1180}
-J7N = {1: "GND", 2: "3V3", 3: "5V", 4: "SCK", 5: "MOSI", 6: "MISO", 7: "CS", 8: "INT"}
-JT, JB = 96, 130
-wire([(PX_L, row_y(1)), (PX_L, Y_33), (J7X[2], Y_33), (J7X[2], JT)], C33)
+# ------------------------------------------------------------------ 3.3V と W5500 Lite を挿す口（J7・J8）
+# J7（1 列目）は横向き、6 番（INT）を左にして描く。J8（2 列目）は縦向き、1 番（G）を上にして描く。
+# 実物では 2 列が並んでいるが、線が重ならないように離して描いている。
+J7X = {6: 920, 5: 960, 4: 1000, 3: 1040, 2: 1080, 1: 1120}
+J7N = {1: "G", 2: "G", 3: "MO", 4: "SCK", 5: "CS", 6: "INT"}
+JT, JB = 104, 138
+J8X, J8Y = 1200, {1: 180, 2: 206, 3: 232, 4: 258, 5: 284, 6: row_y(6)}
+J8N = {1: "G", 2: "V", 3: "V", 4: "NC", 5: "RST", 6: "MI"}
+X33 = 1240  # 3.3V を J8 へ下ろす線
+XG = 1350  # GND を GND の線（レール）へ下ろす線
+
+# 3.3V: ボードの 3V3 → 上を回って J8 の V（2 本）と R3 へ
+wire([(PX_L, row_y(1)), (PX_L, Y_33), (X33, Y_33), (X33, J8Y[3]), (J8X + 12, J8Y[3])], C33)
+wire([(J8X + 12, J8Y[2]), (X33, J8Y[2])], C33)
+dot(X33, J8Y[2], C33)
 text(600, Y_33 - 8, "3.3V の線（橙）", 12, color=C33, weight="bold")
-# INT（IO3）は上を回る
-wire([(PX_L, row_y(13)), (540, row_y(13)), (540, 50), (J7X[8], 50), (J7X[8], JT)], CLAN, hops=[(PX_L, 50)])
+# INT（IO3）は上を回って J7 の 6 番へ
+wire([(PX_L, row_y(12)), (540, row_y(12)), (540, 50), (900, 50), (900, 152), (J7X[6], 152), (J7X[6], JB)],
+     CLAN, hops=[(PX_L, 50)])
 text(640, 45, "IO3 → INT", 12, color=CLAN, weight="bold")
-# R3（CS を 3.3V へ）
-resistor_v(J7X[7], 40, 84, "", C33)
-wire([(J7X[7], Y_33), (J7X[7], 40)], C33)
-wire([(J7X[7], 84), (J7X[7], JT)], CLAN)
-dot(J7X[7], Y_33, C33)
-text(J7X[7] + 14, 66, "R3 10kΩ", 12, color=C33)
-# SPI の 4 本
-for n, row in ((7, 4), (6, 5), (5, 6), (4, 7)):
+# R3（CS を 3.3V へ）は J7 の CS の上につなぐ
+resistor_v(J7X[5], 46, 90, "", C33)
+wire([(J7X[5], Y_33), (J7X[5], 46)], C33)
+wire([(J7X[5], 90), (J7X[5], JT)], CLAN)
+dot(J7X[5], Y_33, C33)
+text(J7X[5] + 14, 72, "R3 10kΩ", 12, color=C33)
+# SPI: CS・SCK・MOSI は J7 へ、MISO は J8 へ
+for n, row in ((5, 3), (4, 4), (3, 5)):
     wire([(PX_R, row_y(row)), (J7X[n], row_y(row)), (J7X[n], JB)], CLAN)
-# J7 の 5V・GND は右端を回ってレールへ
-wire([(J7X[3], JB), (J7X[3], 200), (1330, 200), (1330, Y_5V)], C5V, hops=[(1330, Y_GND)])
-wire([(J7X[1], JB), (J7X[1], 176), (1350, 176), (1350, Y_GND)], CGND)
-add(f'<rect x="876" y="{JT}" width="328" height="{JB - JT}" rx="3" fill="#212121"/>')
+wire([(PX_R, row_y(6)), (J8X - 12, row_y(6))], CLAN)
+# GND: J7 の G 2 本と J8 の G を、右端の線で GND の線（レール）へ
+wire([(J7X[2], JB), (J7X[2], 160), (J7X[1], 160), (J7X[1], JB)], CGND)
+wire([(J7X[1], 160), (XG, 160), (XG, Y_GND)], CGND, hops=[(X33, 160)])
+dot(J7X[1], 160, CGND)
+wire([(J8X + 12, J8Y[1]), (XG, J8Y[1])], CGND, hops=[(X33, J8Y[1])])
+dot(XG, J8Y[1], CGND)
+# J7 の絵
+add(f'<rect x="900" y="{JT}" width="240" height="{JB - JT}" rx="3" fill="#212121"/>')
 for n, x in J7X.items():
     text(x, JT + 14, str(n), 10, "middle", "#bdbdbd")
     text(x, JT + 28, J7N[n], 10, "middle", "#ffffff", "bold")
-text(1214, 112, "J7 有線 LAN 用の口", 13, weight="bold")
-text(1214, 130, "（1×8 メス。W5500 用）", 11, color="#616161")
+text(1000, 98, "J7（W5500 Lite の 1 列目）", 12, weight="bold")
+# J8 の絵
+add(f'<rect x="{J8X - 12}" y="{J8Y[1] - 14}" width="24" height="{J8Y[6] - J8Y[1] + 28}" rx="3" fill="#212121"/>')
+for n, y in J8Y.items():
+    add(f'<circle cx="{J8X}" cy="{y}" r="4" fill="#ffd54f"/>')
+    used = n in (1, 2, 3, 6)
+    if n == 6:  # MI は左から線が来るので、名前は右に書く
+        text(J8X + 20, y + 4, f"{n} {J8N[n]}", 11, color="#212121", weight="bold")
+    else:
+        text(J8X - 18, y + 4, f"{n} {J8N[n]}", 11, "end", "#212121" if used else "#9e9e9e", "bold" if used else "normal")
+text(J8X + 20, J8Y[4] + 4, "NC・RST は", 11, color="#9e9e9e")
+text(J8X + 20, J8Y[5] + 4, "つながない", 11, color="#9e9e9e")
+text(1185, row_y(6) + 26, "J8（W5500 Lite", 12, "end", weight="bold")
+text(1185, row_y(6) + 44, "の 2 列目）", 12, "end", weight="bold")
 
 # ------------------------------------------------------------------ 凡例・注意
 add('<line x1="20" y1="918" x2="1380" y2="918" stroke="#e0e0e0" stroke-width="2"/>')
@@ -286,10 +314,9 @@ text(600, 1054, "B＝R1 と R2", 12)
 
 # 注意
 notes = [
-    ("ボードのピンの並びは想定（ESP32-S3-DevKitC-1 互換）です。", True),
-    ("届いたボードの印字と必ず見比べてください。", True),
+    ("J7・J8 は実物では 2 列が並んでいます（図は見やすく離して描いた）。", True),
+    ("W5500 Lite は 3.3V 専用。5V をつながないこと。", True),
     ("灰色のピンには何もつなぎません。", False),
-    ("J7 は W5500 を後から挿すための口です。今は付けておくだけで構いません。", False),
     ("レーザーの＋は定格に合わせて 5V か 3.3V へ（3V 用なら 3.3V）。", False),
     ("サーボの電源をボードの 3V3 や USB-C から取らないこと。", False),
     ("書き込み（USB）のときは 5V 入力を外す。", False),

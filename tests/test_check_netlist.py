@@ -40,18 +40,24 @@ def test_parse_protel_format():
 
 def test_swapped_spi_lines_are_caught():
     parts, nets = good()
-    nets["ETH_MOSI（IO42）"] = {"J2-6", "J7-6"}  # MOSI と MISO を取り違え
-    nets["ETH_MISO（IO2）"] = {"J2-5", "J7-5"}
+    nets["ETH_MOSI（IO42）"] = {"J2-5", "J8-6"}  # MOSI と MISO を取り違え
+    nets["ETH_MISO（IO41）"] = {"J2-6", "J7-3"}
     problems = run(parts, nets)
     assert any("ETH_MOSI" in p for p in problems) and any("ETH_MISO" in p for p in problems)
 
 
 def test_wrong_header_pin_is_caught():
     parts, nets = good()
-    nets["PAN（IO14）"] = {"J1-19", "J4-3"}  # 隣のピン（カメラの IO13）につないでしまった
+    nets["PAN（IO14）"] = {"J1-18", "J4-3"}  # 隣のピン（カメラの IO13）につないでしまった
     problems = run(parts, nets)
-    assert any("J1-19（IO13）" in p for p in problems)
-    assert any("PAN（IO14）" in p and "J1-20" in p for p in problems)
+    assert any("J1-18（IO13）" in p for p in problems)
+    assert any("PAN（IO14）" in p and "J1-19" in p for p in problems)
+
+
+def test_w5500_unused_pin_is_caught():
+    parts, nets = good()
+    nets["3V3"].add("J8-4")  # W5500 の NC ピンに 3.3V をつないでしまった
+    assert any("J8-4（NC）" in p for p in run(parts, nets))
 
 
 def test_short_between_nets_is_caught():
