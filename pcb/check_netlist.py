@@ -187,6 +187,14 @@ def normalize(parts: dict[str, list[str]], nets: dict[str, set[str]]) -> list[st
                 pins.update(swap[p] for p in hit)
     where = {p: name for name, pins in nets.items() for p in pins}
 
+    # R3（CS）と R4（RST）はどちらも 3.3V への 10k なので、番号が逆でも働きは同じ
+    if "R3" in parts and "R4" in parts and same_net("R4-2", "U1-38") and not same_net("R3-2", "U1-38"):
+        _rename_ref(parts, nets, "R3", "R3_")
+        _rename_ref(parts, nets, "R4", "R3")
+        _rename_ref(parts, nets, "R3_", "R4")
+        notes.append("R4 を CS の、R3 を RST の引き上げとして照合しました（どちらも 10k なので逆でも問題ありません）")
+        where = {p: name for name, pins in nets.items() for p in pins}
+
     # 口のピンの並び: どのピンが何かを、同じネットにある相手から決める
     anchors = {
         "J3": {"5V": "F1-1" if "F1" in parts else "U1-20", "GND": "U1-21"},

@@ -180,3 +180,15 @@ def test_real_netlist_with_mistakes_is_caught():
     problems = cn.check(parts, nets)
     assert any("ETH_MOSI" in p for p in problems)
     assert any("GND" in p and "R2" in p for p in problems)
+
+
+REAL_V2 = ROOT / "tests" / "data" / "sheet1_2026-10-22_v2.net"
+
+
+def test_real_netlist_v2_with_r3_r4_swapped_passes():
+    """2 回目のネットリスト: サーボの口をオスに、抵抗をリード付きに直し、R3 と R4 の番号が入れ替わっている。"""
+    problems, notes = cn.analyze(*cn.parse_protel(REAL_V2.read_text(encoding="utf-8")))
+    assert problems == []
+    joined = "\n".join(notes)
+    assert "R4 を CS" in joined
+    assert "HDR-F" not in joined and "0603" not in joined  # 足の形の注意は消えた
