@@ -111,3 +111,49 @@ def test_cli(tmp_path, capsys):
     assert "接続表どおり" in capsys.readouterr().out
     f.write_text("not a netlist", encoding="utf-8")
     assert cn.main([str(f)]) == 2
+
+
+def user_schematic(tweak=None):
+    """届いた回路図（2026-10-22 のスクリーンショット）と同じ記号・番号のネットリスト。"""
+    parts = [p for p in cn.REQUIRED]  # JP1 なし、レーザーの＋は 5V へ直接
+    nets = {name: set(pins) for name, pins in cn.expected_nets(set(parts)).items()}
+    mini_to_lite = {1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 12, 8: 11, 9: 10, 10: 8, 11: 9, 12: 7}
+    rename = {f"W1-{m}": f"U3-{l}" for m, l in mini_to_lite.items()}
+    rename |= {f"Q1-{n}": f"U2-{n}" for n in (1, 2, 3)}
+    rename |= {"J6-1": "H1-1", "J6-2": "H1-2"}  # VCC・GND の順
+    rename |= {"J4-1": "J4-3", "J4-2": "J4-2", "J4-3": "J4-1"}  # PWM・VCC・GND の順
+    rename |= {"J5-1": "J5-3", "J5-2": "J5-2", "J5-3": "J5-1"}
+    rename |= {"J3-1": "J3-2", "J3-2": "J3-1"}  # GND・5V の順
+    nets = {name: {rename.get(p, p) for p in pins} for name, pins in nets.items()}
+    parts = [{"Q1": "U2", "W1": "U3", "J6": "H1"}.get(p, p) for p in parts]
+    if tweak:
+        tweak(nets)
+    text = make_netlist(parts, nets).replace("[\r\nU3\r\nFOOTPRINT\r\nVALUE", "[\r\nU3\r\nW5500-LITE\r\nW5500-LITE")
+    return cn.parse_protel(text)
+
+
+def test_user_schematic_passes_with_notes():
+    problems, notes = cn.analyze(*user_schematic())
+    assert problems == []
+    joined = "\n".join(notes)
+    assert "W5500-LITE" in joined and "U2 を Q1" in joined and "H1 を J6" in joined
+    assert "J4（パン用サーボ）: 1 番＝信号、2 番＝5V、3 番＝GND" in joined
+    assert "J3（5V 入力）: 1 番＝GND、2 番＝5V" in joined
+    assert "レーザーの＋は 5V" in joined
+
+
+def test_user_schematic_earlier_mistakes_are_caught():
+    def unwire(nets):
+        for pins in nets.values():
+            pins.discard("U3-7")  # W5500 の 7 番（GND）のつなぎ忘れ
+            pins.discard("U3-9")  # 9 番（3.3V）の線が届いていない
+    problems = cn.check(*user_schematic(unwire))
+    assert any("W1-7" in p for p in problems) and any("W1-9" in p for p in problems)
+
+
+def test_laser_on_3v3_and_rst_pullup():
+    parts, nets = good(cn.REQUIRED + ["R4"])
+    nets["5V"].discard("J6-1")
+    nets["3V3"].add("J6-1")
+    problems, notes = cn.analyze(*cn.parse_protel(make_netlist(parts, nets)))
+    assert problems == [] and any("3.3V" in n for n in notes)
