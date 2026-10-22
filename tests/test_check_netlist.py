@@ -40,24 +40,41 @@ def test_parse_protel_format():
 
 def test_swapped_spi_lines_are_caught():
     parts, nets = good()
-    nets["ETH_MOSI（IO42）"] = {"J2-5", "J8-6"}  # MOSI と MISO を取り違え
-    nets["ETH_MISO（IO41）"] = {"J2-6", "J7-3"}
+    nets["ETH_MOSI（IO42）"] = {"U1-36", "W1-7"}  # MOSI と MISO を取り違え
+    nets["ETH_MISO（IO41）"] = {"U1-35", "W1-3"}
     problems = run(parts, nets)
     assert any("ETH_MOSI" in p for p in problems) and any("ETH_MISO" in p for p in problems)
 
 
 def test_wrong_header_pin_is_caught():
     parts, nets = good()
-    nets["PAN（IO14）"] = {"J1-18", "J4-3"}  # 隣のピン（カメラの IO13）につないでしまった
+    nets["PAN（IO14）"] = {"U1-18", "J4-3"}  # 隣のピン（カメラの IO13）につないでしまった
     problems = run(parts, nets)
-    assert any("J1-18（IO13）" in p for p in problems)
-    assert any("PAN（IO14）" in p and "J1-19" in p for p in problems)
+    assert any("U1-18（IO13）" in p for p in problems)
+    assert any("PAN（IO14）" in p and "U1-19" in p for p in problems)
 
 
 def test_w5500_unused_pin_is_caught():
     parts, nets = good()
-    nets["3V3"].add("J8-4")  # W5500 の NC ピンに 3.3V をつないでしまった
-    assert any("J8-4（NC）" in p for p in run(parts, nets))
+    nets["3V3"].add("W1-9")  # W5500 の NC ピンに 3.3V をつないでしまった
+    assert any("W1-9（NC）" in p for p in run(parts, nets))
+
+
+def test_easyeda_part_numbers():
+    """EasyEDA の部品の番号（右列は上から 40〜21）で、主なピンが正しい所にあること。"""
+    assert {n: cn.U1_PINS[n] for n in (1, 12, 19, 20, 21, 24, 25, 28, 35, 36, 37, 38)} == {
+        1: "3V3", 12: "IO3", 19: "IO14", 20: "5V", 21: "GND", 24: "IO21", 25: "IO47",
+        28: "IO0", 35: "IO41", 36: "IO42", 37: "IO2", 38: "IO1"}
+
+
+def test_transistor_named_u2_is_accepted():
+    parts, nets = good()
+    parts[parts.index("Q1")] = "U2"
+    for pins in nets.values():
+        for p in [p for p in pins if p.startswith("Q1-")]:
+            pins.discard(p)
+            pins.add("U2-" + p.split("-")[1])
+    assert run(parts, nets) == []
 
 
 def test_short_between_nets_is_caught():
