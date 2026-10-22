@@ -23,3 +23,15 @@ def test_committed_svg_is_up_to_date():
     wd = load("wiring_diagram", "docs/images/wiring_diagram.py")
     committed = (ROOT / "docs/images/wiring.svg").read_text(encoding="utf-8")
     assert committed == wd.render(), "python docs/images/wiring_diagram.py で作り直してください"
+
+
+def test_committed_figures_are_up_to_date():
+    fig = load("figures", "docs/images/figures.py")
+    for name, fn in (("unit.svg", fig.unit), ("install.svg", fig.install)):
+        committed = (ROOT / "docs/images" / name).read_text(encoding="utf-8")
+        assert committed == fn(), f"{name}: python docs/images/figures.py で作り直してください"
+
+
+def test_every_svg_has_a_png():
+    for svg in (ROOT / "docs/images").glob("*.svg"):
+        assert svg.with_suffix(".png").exists(), f"{svg.name}: python docs/images/render.py で PNG を作ってください"
