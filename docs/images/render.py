@@ -25,7 +25,7 @@ CROPS = {
     "wiring_power.png": (0, 585, 1010, 910),  # 電源・コンデンサ・サーボ
     "wiring_laser.png": (800, 300, 1400, 910),  # レーザー（R1・R2・Q1）
     "wiring_to92.png": (490, 925, 850, 1075),  # 2SC1815 の足
-    "wiring_lan.png": (520, 0, 1400, 340),  # 有線 LAN 用の口（J7）
+    "wiring_lan.png": (520, 0, 1400, 370),  # 有線 LAN 用の口（J7・J8）
 }
 
 

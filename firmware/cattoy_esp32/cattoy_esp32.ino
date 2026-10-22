@@ -64,10 +64,11 @@ extern "C" const char CATTOY_FW_TAG[] = "CATTOY_FW|" FW_VERSION "|" __DATE__ " "
 #define BUTTON_PIN 0   // 基板の BOOT ボタン（起動後は普通のボタンとして使える）
 #define RGB_LED_PIN 48 // 基板のフルカラー LED（状態表示）
 
-// 有線 LAN（W5500）用に予約（docs/hardware.md の「有線 LAN 用の口」）。ほかの用途に使わないこと
-#define ETH_SCK_PIN 41
+// 有線 LAN（W5500）用に予約（docs/hardware.md の「有線 LAN 用の口」）。ほかの用途に使わないこと。
+// IO2 はボード上の LED につながっているので、ESP32 が出力する SCK に使う（W5500 が出力する MISO には使わない）
+#define ETH_SCK_PIN 2
 #define ETH_MOSI_PIN 42
-#define ETH_MISO_PIN 2
+#define ETH_MISO_PIN 41
 #define ETH_CS_PIN 1
 #define ETH_INT_PIN 3
 
