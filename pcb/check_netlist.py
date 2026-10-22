@@ -4,14 +4,18 @@
   1. EasyEDA で「書き出し → ネットリスト」を選び、形式は「Protel」（「Altium」「Protel2」と表示されることもある）で保存する
   2. python pcb/check_netlist.py <保存したファイル>
 
-部品の記号（U1・R1 など）とピン番号は docs/pcb.md の表のとおりに付けてあることが前提。
+部品の記号とピン番号は docs/pcb.md の表が基準。ただし次の違いは自動で読み替える。
+- 記号: トランジスタが U2（→ Q1）、W5500 が U3（→ W1）、レーザーの口が H1（→ J6）でもよい。「U3.1」の「.1」も無視する
+- W5500 の部品: 「W5500MINI」と「W5500-LITE」で 2 列目の番号の付け方が違うので、部品名で見分ける
+- 口（J3・J4・J5・J6）のピンの並び: どのピンが 5V・GND・信号かを、つながっている相手から判断する
+  （判断した並びを表示するので、基板の印字に使う）
 ESP32 ボードは EasyEDA の部品「ESP32-S3 WROOM N16R8 CAM」（U1、40 ピン。左列が上から 1〜20、
-右列が上から 40〜21）、W5500 は「W5500MINI」（W1、12 ピン）の番号に合わせてある。
-ピンの並びは、届いたボードの印字の写真とも一致している。
+右列が上から 40〜21）の番号。ピンの並びは、届いたボードの印字の写真とも一致している。
 """
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -25,16 +29,27 @@ HEADER_RIGHT = [  # U1 の 40〜21 番
     "IO36", "IO35", "IO0", "IO45", "IO48", "IO47", "IO21", "IO20", "IO19", "GND",
 ]
 U1_PINS = {i: n for i, n in enumerate(HEADER_LEFT, 1)} | {41 - k: n for k, n in enumerate(HEADER_RIGHT, 1)}
-# W5500 Lite（W1）。1〜6 番が 1 列目（G・G・MO・SCK・CS・INT）、7〜12 番が 2 列目を逆順に（MI・RST・NC・V・V・G）
-W1_PINS = {1: "GND", 2: "GND", 3: "MOSI", 4: "SCK", 5: "CS", 6: "INT",
-           7: "MISO", 8: "RST", 9: "NC", 10: "3V3", 11: "3V3", 12: "GND"}
-# つないではいけないピンを調べる部品（ピンの取り違えを見つける）
-CHECKED_PARTS = {"U1": U1_PINS, "W1": W1_PINS}
-# トランジスタは Q1 と呼ぶ（EasyEDA で U2 になっていてもよい）
-TRANSISTOR_ALIASES = ("U2",)
+# W5500 Lite（W1）。どちらも 1〜6 番が 1 列目（G・G・MO・SCK・CS・INT）で、2 列目の番号の付け方が部品によって違う
+W5500_MINI_PINS = {1: "GND", 2: "GND", 3: "MOSI", 4: "SCK", 5: "CS", 6: "INT",
+                   7: "MISO", 8: "RST", 9: "NC", 10: "3V3", 11: "3V3", 12: "GND"}  # 「W5500MINI」: 2 列目を逆順に
+W5500_LITE_PINS = {1: "GND", 2: "GND", 3: "MOSI", 4: "SCK", 5: "CS", 6: "INT",
+                   7: "GND", 8: "3V3", 9: "3V3", 10: "NC", 11: "RST", 12: "MISO"}  # 「W5500-LITE」: 2 列目も同じ向きに
+W1_PINS = W5500_MINI_PINS  # 部品名が分からないとき
 
-REQUIRED = ["U1", "W1", "J3", "J4", "J5", "J6", "JP1", "Q1", "R1", "R2", "R3", "C1"]
-OPTIONAL = ["F1", "C2", "C3", "J9"]
+# 記号の読み替え（正式な記号が無く、別名があるとき）
+ALIASES = {"Q1": ("U2",), "W1": ("U3",), "J6": ("H1",)}
+
+REQUIRED = ["U1", "W1", "J3", "J4", "J5", "J6", "Q1", "R1", "R2", "R3", "C1"]
+OPTIONAL = ["JP1", "F1", "C2", "C3", "J9", "R4"]
+
+# 口のピンの役目と、照合で使う番号（docs/pcb.md の番号）
+CONNECTOR_ROLES = {
+    "J3": {"5V": 1, "GND": 2},
+    "J4": {"GND": 1, "5V": 2, "信号": 3},
+    "J5": {"GND": 1, "5V": 2, "信号": 3},
+    "J6": {"＋": 1, "−": 2},
+}
+CONNECTOR_NAMES = {"J3": "5V 入力", "J4": "パン用サーボ", "J5": "チルト用サーボ", "J6": "レーザー"}
 
 
 def board_pins(name: str) -> list[str]:
@@ -42,29 +57,40 @@ def board_pins(name: str) -> list[str]:
     return [f"U1-{n}" for n, s in sorted(U1_PINS.items()) if s == name]
 
 
-def w5500_pins(name: str) -> list[str]:
+def w5500_pins(name: str, w5500: dict[int, str] = W1_PINS) -> list[str]:
     """W5500（W1）の、その信号名のピン。"""
-    return [f"W1-{n}" for n, s in sorted(W1_PINS.items()) if s == name]
+    return [f"W1-{n}" for n, s in sorted(w5500.items()) if s == name]
 
 
-def expected_nets(parts: set[str]) -> dict[str, set[str]]:
-    """つながっているべきピンの組。キーは説明用の名前で、回路図のネット名と同じでなくてよい。"""
+def expected_nets(parts: set[str], w5500: dict[int, str] = W1_PINS, laser_supply: str = "5V") -> dict[str, set[str]]:
+    """つながっているべきピンの組。キーは説明用の名前で、回路図のネット名と同じでなくてよい。
+
+    laser_supply は、JP1（電圧の切り替え）を使わないときにレーザーの＋をつなぐ先（"5V" か "3V3"）。
+    """
+    def w(name):
+        return w5500_pins(name, w5500)
+
     nets = {
-        "5V": {*board_pins("5V"), "J4-2", "J5-2", "C1-1", "JP1-1"},
-        "3V3": {*board_pins("3V3"), *w5500_pins("3V3"), "R3-1", "JP1-3"},
-        "GND": {*board_pins("GND"), *w5500_pins("GND"), "J3-2", "J4-1", "J5-1", "C1-2", "Q1-1", "R2-2"},
+        "5V": {*board_pins("5V"), "J4-2", "J5-2", "C1-1"},
+        "3V3": {*board_pins("3V3"), *w("3V3"), "R3-1"},
+        "GND": {*board_pins("GND"), *w("GND"), "J3-2", "J4-1", "J5-1", "C1-2", "Q1-1", "R2-2"},
         "PAN（IO14）": {*board_pins("IO14"), "J4-3"},
         "TILT（IO21）": {*board_pins("IO21"), "J5-3"},
         "レーザー信号（IO47）": {*board_pins("IO47"), "R1-1"},
         "レーザーのベース": {"R1-2", "Q1-3", "R2-1"},
         "レーザー（−）": {"Q1-2", "J6-2"},
-        "レーザー（＋）": {"J6-1", "JP1-2"},
-        "ETH_SCK（IO2）": {*board_pins("IO2"), *w5500_pins("SCK")},
-        "ETH_MOSI（IO42）": {*board_pins("IO42"), *w5500_pins("MOSI")},
-        "ETH_MISO（IO41）": {*board_pins("IO41"), *w5500_pins("MISO")},
-        "ETH_CS（IO1）": {*board_pins("IO1"), *w5500_pins("CS"), "R3-2"},
-        "ETH_INT（IO3）": {*board_pins("IO3"), *w5500_pins("INT")},
+        "ETH_SCK（IO2）": {*board_pins("IO2"), *w("SCK")},
+        "ETH_MOSI（IO42）": {*board_pins("IO42"), *w("MOSI")},
+        "ETH_MISO（IO41）": {*board_pins("IO41"), *w("MISO")},
+        "ETH_CS（IO1）": {*board_pins("IO1"), *w("CS"), "R3-2"},
+        "ETH_INT（IO3）": {*board_pins("IO3"), *w("INT")},
     }
+    if "JP1" in parts:  # レーザーの電圧をジャンパーで選ぶ
+        nets["レーザー（＋）"] = {"J6-1", "JP1-2"}
+        nets["5V"].add("JP1-1")
+        nets["3V3"].add("JP1-3")
+    else:  # レーザーの＋を 5V か 3.3V へ直接
+        nets[laser_supply].add("J6-1")
     if "F1" in parts:  # ヒューズがあれば、端子台 → F1 → 5V
         nets["5V 入力（ヒューズの前）"] = {"J3-1", "F1-1"}
         nets["5V"].add("F1-2")
@@ -74,6 +100,9 @@ def expected_nets(parts: set[str]) -> dict[str, set[str]]:
         if cap in parts:
             nets["3V3"].add(f"{cap}-1")
             nets["GND"].add(f"{cap}-2")
+    if "R4" in parts:  # W5500 の RST を 3.3V へ（任意）
+        nets["W5500 の RST"] = {*w("RST"), "R4-2"}
+        nets["3V3"].add("R4-1")
     if "J9" in parts:  # 外付けの ON/OFF ボタン（任意）
         nets["ボタン（IO0）"] = {*board_pins("IO0"), "J9-1"}
         nets["GND"].add("J9-2")
@@ -105,34 +134,105 @@ def parse_protel(text: str) -> tuple[dict[str, list[str]], dict[str, set[str]]]:
     return parts, nets
 
 
-def normalize(parts: dict[str, list[str]], nets: dict[str, set[str]]) -> None:
-    """トランジスタの記号が Q1 でなく U2 などなら、Q1 として扱う。"""
-    if "Q1" in parts:
-        return
-    for alias in TRANSISTOR_ALIASES:
-        if alias in parts:
-            parts["Q1"] = parts.pop(alias)
-            for pins in nets.values():
-                for p in [p for p in pins if p.startswith(alias + "-")]:
-                    pins.discard(p)
-                    pins.add("Q1-" + p.split("-", 1)[1])
-            return
+def _rename_ref(parts, nets, old: str, new: str) -> None:
+    parts[new] = parts.pop(old)
+    for pins in nets.values():
+        for p in [p for p in pins if p.split("-", 1)[0] == old]:
+            pins.discard(p)
+            pins.add(new + "-" + p.split("-", 1)[1])
 
 
-def check(parts: dict[str, list[str]], nets: dict[str, set[str]]) -> list[str]:
-    """問題点の一覧（日本語）。空なら接続表どおり。"""
-    normalize(parts, nets)
+def normalize(parts: dict[str, list[str]], nets: dict[str, set[str]]) -> list[str]:
+    """記号の読み替えと、口のピンの並びの判断。表示するためのメモを返す。"""
+    notes: list[str] = []
+    # 「U3.1」→「U3」
+    for ref in list(parts):
+        base = re.sub(r"\.\d+$", "", ref)
+        if base != ref and base not in parts:
+            _rename_ref(parts, nets, ref, base)
+    for pins in nets.values():
+        for p in list(pins):
+            ref, _, num = p.partition("-")
+            base = re.sub(r"\.\d+$", "", ref)
+            if base != ref:
+                pins.discard(p)
+                pins.add(f"{base}-{num}")
+    # 別名の記号
+    for canon, aliases in ALIASES.items():
+        if canon in parts:
+            continue
+        for alias in aliases:
+            if alias in parts:
+                _rename_ref(parts, nets, alias, canon)
+                notes.append(f"{alias} を {canon} として照合しました")
+                break
+
+    # 口のピンの並び: どのピンが何かを、同じネットにある相手から決める
+    where = {p: name for name, pins in nets.items() for p in pins}
+
+    def same_net(p, anchor):
+        return p in where and where[p] == where.get(anchor)
+
+    anchors = {
+        "J3": {"5V": "F1-1" if "F1" in parts else "U1-20", "GND": "U1-21"},
+        "J4": {"GND": "U1-21", "5V": "U1-20", "信号": "U1-19"},
+        "J5": {"GND": "U1-21", "5V": "U1-20", "信号": "U1-24"},
+        "J6": {"−": "Q1-2"},
+    }
+    for ref, roles in CONNECTOR_ROLES.items():
+        mine = sorted({p for p in where if p.split("-", 1)[0] == ref}, key=lambda p: p.split("-", 1)[1])
+        if not mine:
+            continue
+        found: dict[str, str] = {}  # ピン → 役目
+        for p in mine:
+            for role, anchor in anchors[ref].items():
+                if same_net(p, anchor) and role not in found.values():
+                    found[p] = role
+                    break
+        if ref == "J6":  # − でないほうが＋
+            rest = [p for p in mine if p not in found]
+            if len(rest) == 1:
+                found[rest[0]] = "＋"
+        taken = {str(roles[r]) for r in found.values()}
+        renamed = {}
+        for p in mine:
+            num = p.split("-", 1)[1]
+            if p in found:
+                renamed[p] = f"{ref}-{roles[found[p]]}"
+            else:  # 役目が分からないピンは、番号がぶつからなければそのまま（ぶつかるなら「?」を付ける）
+                renamed[p] = f"{ref}-{num}" if num not in taken else f"{ref}-?{num}"
+        for pins in nets.values():
+            for p in [p for p in pins if p in renamed]:
+                pins.discard(p)
+                pins.add(renamed[p])
+        if found:
+            order = "、".join(f"{p.split('-', 1)[1]} 番＝{found[p]}" for p in mine if p in found)
+            notes.append(f"{ref}（{CONNECTOR_NAMES[ref]}）: {order}（基板の印字にこの並びを書く）")
+    return notes
+
+
+def analyze(parts: dict[str, list[str]], nets: dict[str, set[str]]) -> tuple[list[str], list[str]]:
+    """（問題点の一覧, メモ）。問題点が空なら接続表どおり。"""
+    notes = normalize(parts, nets)
     problems = [f"部品 {ref} がありません" for ref in REQUIRED if ref not in parts]
     unknown = sorted(set(parts) - set(REQUIRED) - set(OPTIONAL))
     if unknown:
         problems.append(f"接続表にない部品があります: {', '.join(unknown)}（記号の付け間違いでなければ無視してよい）")
 
-    where = {}  # ピン → ネット名
-    for name, pins in nets.items():
-        for p in pins:
-            where[p] = name
+    info = " ".join(parts.get("W1", [])).upper()
+    w5500 = W5500_LITE_PINS if "LITE" in info else W5500_MINI_PINS
+    if "W1" in parts:
+        notes.append(f"W5500 は「{'W5500-LITE' if w5500 is W5500_LITE_PINS else 'W5500MINI'}」の番号で照合しました")
 
-    expected = expected_nets(set(parts))
+    where = {p: name for name, pins in nets.items() for p in pins}
+    laser_supply = "5V"
+    if "JP1" not in parts and "J6-1" in where:
+        if where["J6-1"] == where.get("U1-1"):
+            laser_supply = "3V3"
+        notes.append(f"レーザーの＋は {laser_supply.replace('3V3', '3.3V')} へ直接つながっています。"
+                     "レーザーの定格電圧がこれと同じか確かめてください（高すぎると明るくなりすぎ、1mW を超えるおそれがある）")
+
+    expected = expected_nets(set(parts), w5500, laser_supply)
     used_nets: dict[str, str] = {}  # 回路図のネット名 → 期待した組の名前
     shorted: set[frozenset[str]] = set()
     for label, pins in expected.items():
@@ -151,13 +251,23 @@ def check(parts: dict[str, list[str]], nets: dict[str, set[str]]) -> list[str]:
             used_nets.setdefault(n, label)
 
     # ESP32 ボードと W5500 の、使わないはずのピンが何かにつながっていないか（ピンの取り違えを見つける）
+    checked = {"U1": U1_PINS, "W1": w5500}
     expected_pins = set().union(*expected.values())
     for p, name in sorted(where.items()):
         ref, _, num = p.partition("-")
-        if ref in CHECKED_PARTS and p not in expected_pins and len(nets[name]) > 1:
-            signal = CHECKED_PARTS[ref].get(int(num), "?") if num.isdigit() else "?"
+        if ref in checked and p not in expected_pins and len(nets[name]) > 1:
+            signal = checked[ref].get(int(num), "?") if num.isdigit() else "?"
             problems.append(f"{p}（{signal}）はつながないピンですが、ネット {name} につながっています")
-    return problems
+    # 役目の分からなかった口のピン
+    for p in sorted(where):
+        if "-?" in p:
+            problems.append(f"{p.replace('-?', '-')} が何につながるピンか分かりません（5V・GND・信号のどれにもつながっていない）")
+    return problems, notes
+
+
+def check(parts: dict[str, list[str]], nets: dict[str, set[str]]) -> list[str]:
+    """問題点の一覧（日本語）。空なら接続表どおり。"""
+    return analyze(parts, nets)[0]
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -169,7 +279,9 @@ def main(argv: list[str] | None = None) -> int:
     if not parts and not nets:
         print("ネットリストを読めませんでした。EasyEDA の書き出しで「Protel」形式を選んだか確認してください。")
         return 2
-    problems = check(parts, nets)
+    problems, notes = analyze(parts, nets)
+    for n in notes:
+        print(f"メモ: {n}")
     if problems:
         print(f"接続表と違う所が {len(problems)} 件あります:")
         for p in problems:
