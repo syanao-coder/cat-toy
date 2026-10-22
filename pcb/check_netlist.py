@@ -50,6 +50,9 @@ CONNECTOR_ROLES = {
     "J6": {"＋": 1, "−": 2},
 }
 CONNECTOR_NAMES = {"J3": "5V 入力", "J4": "パン用サーボ", "J5": "チルト用サーボ", "J6": "レーザー"}
+# 向きのない部品（抵抗・セラミックコンデンサ）: どちらの向きに描いてもよい。
+# （記号 → この相手と同じネットにあるべきピンの番号, 相手）
+UNPOLARIZED = {"R1": (1, "U1-25"), "R2": (2, "U1-21"), "R3": (1, "U1-1"), "R4": (1, "U1-1"), "C2": (1, "U1-1")}
 
 
 def board_pins(name: str) -> list[str]:
@@ -167,12 +170,24 @@ def normalize(parts: dict[str, list[str]], nets: dict[str, set[str]]) -> list[st
                 notes.append(f"{alias} を {canon} として照合しました")
                 break
 
-    # 口のピンの並び: どのピンが何かを、同じネットにある相手から決める
     where = {p: name for name, pins in nets.items() for p in pins}
 
     def same_net(p, anchor):
         return p in where and where[p] == where.get(anchor)
 
+    # 向きのない部品が逆向きに描かれていたら、1 番と 2 番を入れ替えて読む
+    for ref, (num, anchor) in UNPOLARIZED.items():
+        other = 3 - num
+        if ref in parts and same_net(f"{ref}-{other}", anchor) and not same_net(f"{ref}-{num}", anchor):
+            swap = {f"{ref}-1": f"{ref}-2", f"{ref}-2": f"{ref}-1"}
+            for pins in nets.values():
+                hit = [p for p in pins if p in swap]
+                for p in hit:
+                    pins.discard(p)
+                pins.update(swap[p] for p in hit)
+    where = {p: name for name, pins in nets.items() for p in pins}
+
+    # 口のピンの並び: どのピンが何かを、同じネットにある相手から決める
     anchors = {
         "J3": {"5V": "F1-1" if "F1" in parts else "U1-20", "GND": "U1-21"},
         "J4": {"GND": "U1-21", "5V": "U1-20", "信号": "U1-19"},
@@ -231,6 +246,16 @@ def analyze(parts: dict[str, list[str]], nets: dict[str, set[str]]) -> tuple[lis
             laser_supply = "3V3"
         notes.append(f"レーザーの＋は {laser_supply.replace('3V3', '3.3V')} へ直接つながっています。"
                      "レーザーの定格電圧がこれと同じか確かめてください（高すぎると明るくなりすぎ、1mW を超えるおそれがある）")
+
+    # 足の形（フットプリント）で気づいたこと
+    for ref in ("J4", "J5"):
+        if any("HDR-F" in x.upper() for x in parts.get(ref, [])):
+            notes.append(f"{ref}（{CONNECTOR_NAMES[ref]}）の足の形がメスのピンヘッダー（HDR-F）です。"
+                         "サーボのケーブルの先はメスなので、基板側はオスのピンヘッダー（HDR-M）にしないと挿せません")
+    smd = sorted(ref for ref, info in parts.items() if ref[0] in "RC" and any(re.search(r"\b[RC]?0[46]0[23]\b", x) for x in info))
+    if smd:
+        notes.append(f"{', '.join(smd)} の足の形が小さな表面実装（0603 など、1.6×0.8mm）です。"
+                     "手ではんだ付けするなら、穴に差す形（AXIAL-0.4 など）か、少し大きい 0805・1206 のほうが楽です")
 
     expected = expected_nets(set(parts), w5500, laser_supply)
     used_nets: dict[str, str] = {}  # 回路図のネット名 → 期待した組の名前

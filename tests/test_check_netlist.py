@@ -157,3 +157,26 @@ def test_laser_on_3v3_and_rst_pullup():
     nets["3V3"].add("J6-1")
     problems, notes = cn.analyze(*cn.parse_protel(make_netlist(parts, nets)))
     assert problems == [] and any("3.3V" in n for n in notes)
+
+
+REAL = ROOT / "tests" / "data" / "sheet1_2026-10-22.net"
+
+
+def test_real_easyeda_netlist_passes():
+    """EasyEDA Std が書き出した実物のネットリスト（R2・R3・R4 は逆向きに描かれている）。"""
+    problems, notes = cn.analyze(*cn.parse_protel(REAL.read_text(encoding="utf-8")))
+    assert problems == []
+    joined = "\n".join(notes)
+    assert "J4（パン用サーボ）: 1 番＝信号、2 番＝5V、3 番＝GND" in joined
+    assert "HDR-F" in joined and "0603" in joined  # 足の形の注意
+
+
+def test_real_netlist_with_mistakes_is_caught():
+    parts, nets = cn.parse_protel(REAL.read_text(encoding="utf-8"))
+    nets["U1_36"].discard("U3-3")  # MOSI を SCLK へつないでしまった
+    nets["U1_37"].add("U3-3")
+    nets["GND"].discard("R2-1")  # R2 を GND でなく 5V へ
+    nets["U1_20"].add("R2-1")
+    problems = cn.check(parts, nets)
+    assert any("ETH_MOSI" in p for p in problems)
+    assert any("GND" in p and "R2" in p for p in problems)
