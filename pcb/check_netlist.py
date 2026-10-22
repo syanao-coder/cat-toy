@@ -4,9 +4,10 @@
   1. EasyEDA で「書き出し → ネットリスト」を選び、形式は「Protel」（「Altium」「Protel2」と表示されることもある）で保存する
   2. python pcb/check_netlist.py <保存したファイル>
 
-部品の記号（J1・R1 など）とピン番号は docs/pcb.md の表のとおりに付けてあることが前提。
-ESP32 ボードのピンの並び（HEADER_LEFT / HEADER_RIGHT）は、届いたボード（ESP32-S3 WROOM N16R8 CAM、
-片側 20 本）の印字の写真から読み取ったもの。
+部品の記号（U1・R1 など）とピン番号は docs/pcb.md の表のとおりに付けてあることが前提。
+ESP32 ボードは EasyEDA の部品「ESP32-S3 WROOM N16R8 CAM」（U1、40 ピン。左列が上から 1〜20、
+右列が上から 40〜21）、W5500 は「W5500MINI」（W1、12 ピン）の番号に合わせてある。
+ピンの並びは、届いたボードの印字の写真とも一致している。
 """
 
 from __future__ import annotations
@@ -14,49 +15,55 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-# ESP32 ボードのピンヘッダー。1 番はアンテナ側（USB-C と反対の端）
-HEADER_LEFT = [  # J1
+# ESP32 ボードのピンヘッダー（アンテナ側から順に）
+HEADER_LEFT = [  # U1 の 1〜20 番
     "3V3", "EN", "IO4", "IO5", "IO6", "IO7", "IO15", "IO16", "IO17", "IO18",
     "IO8", "IO3", "IO46", "IO9", "IO10", "IO11", "IO12", "IO13", "IO14", "5V",
 ]
-HEADER_RIGHT = [  # J2
+HEADER_RIGHT = [  # U1 の 40〜21 番
     "IO43", "IO44", "IO1", "IO2", "IO42", "IO41", "IO40", "IO39", "IO38", "IO37",
     "IO36", "IO35", "IO0", "IO45", "IO48", "IO47", "IO21", "IO20", "IO19", "GND",
 ]
-# W5500 Lite を挿す口（6 本 × 2 列）。1 番は GND の端
-W5500_ROW1 = ["GND", "GND", "MOSI", "SCK", "CS", "INT"]  # J7
-W5500_ROW2 = ["GND", "3V3", "3V3", "NC", "RST", "MISO"]  # J8
-# つないではいけないピンを調べる口（ピンの取り違えを見つける）
-CHECKED_HEADERS = {"J1": HEADER_LEFT, "J2": HEADER_RIGHT, "J7": W5500_ROW1, "J8": W5500_ROW2}
+U1_PINS = {i: n for i, n in enumerate(HEADER_LEFT, 1)} | {41 - k: n for k, n in enumerate(HEADER_RIGHT, 1)}
+# W5500 Lite（W1）。1〜6 番が 1 列目（G・G・MO・SCK・CS・INT）、7〜12 番が 2 列目を逆順に（MI・RST・NC・V・V・G）
+W1_PINS = {1: "GND", 2: "GND", 3: "MOSI", 4: "SCK", 5: "CS", 6: "INT",
+           7: "MISO", 8: "RST", 9: "NC", 10: "3V3", 11: "3V3", 12: "GND"}
+# つないではいけないピンを調べる部品（ピンの取り違えを見つける）
+CHECKED_PARTS = {"U1": U1_PINS, "W1": W1_PINS}
+# トランジスタは Q1 と呼ぶ（EasyEDA で U2 になっていてもよい）
+TRANSISTOR_ALIASES = ("U2",)
 
-REQUIRED = ["J1", "J2", "J3", "J4", "J5", "J6", "J7", "J8", "JP1", "Q1", "R1", "R2", "R3", "C1"]
+REQUIRED = ["U1", "W1", "J3", "J4", "J5", "J6", "JP1", "Q1", "R1", "R2", "R3", "C1"]
 OPTIONAL = ["F1", "C2", "C3", "J9"]
 
 
 def board_pins(name: str) -> list[str]:
-    """ESP32 ボードの信号名（3V3・IO14 など）が出ているヘッダーのピン。"""
-    pins = [f"J1-{i}" for i, n in enumerate(HEADER_LEFT, 1) if n == name]
-    pins += [f"J2-{i}" for i, n in enumerate(HEADER_RIGHT, 1) if n == name]
-    return pins
+    """ESP32 ボード（U1）の、その信号名（3V3・IO14 など）のピン。"""
+    return [f"U1-{n}" for n, s in sorted(U1_PINS.items()) if s == name]
+
+
+def w5500_pins(name: str) -> list[str]:
+    """W5500（W1）の、その信号名のピン。"""
+    return [f"W1-{n}" for n, s in sorted(W1_PINS.items()) if s == name]
 
 
 def expected_nets(parts: set[str]) -> dict[str, set[str]]:
     """つながっているべきピンの組。キーは説明用の名前で、回路図のネット名と同じでなくてよい。"""
     nets = {
         "5V": {*board_pins("5V"), "J4-2", "J5-2", "C1-1", "JP1-1"},
-        "3V3": {*board_pins("3V3"), "J8-2", "J8-3", "R3-1", "JP1-3"},
-        "GND": {*board_pins("GND"), "J3-2", "J4-1", "J5-1", "C1-2", "J7-1", "J7-2", "J8-1", "Q1-1", "R2-2"},
+        "3V3": {*board_pins("3V3"), *w5500_pins("3V3"), "R3-1", "JP1-3"},
+        "GND": {*board_pins("GND"), *w5500_pins("GND"), "J3-2", "J4-1", "J5-1", "C1-2", "Q1-1", "R2-2"},
         "PAN（IO14）": {*board_pins("IO14"), "J4-3"},
         "TILT（IO21）": {*board_pins("IO21"), "J5-3"},
         "レーザー信号（IO47）": {*board_pins("IO47"), "R1-1"},
         "レーザーのベース": {"R1-2", "Q1-3", "R2-1"},
         "レーザー（−）": {"Q1-2", "J6-2"},
         "レーザー（＋）": {"J6-1", "JP1-2"},
-        "ETH_SCK（IO2）": {*board_pins("IO2"), "J7-4"},
-        "ETH_MOSI（IO42）": {*board_pins("IO42"), "J7-3"},
-        "ETH_MISO（IO41）": {*board_pins("IO41"), "J8-6"},
-        "ETH_CS（IO1）": {*board_pins("IO1"), "J7-5", "R3-2"},
-        "ETH_INT（IO3）": {*board_pins("IO3"), "J7-6"},
+        "ETH_SCK（IO2）": {*board_pins("IO2"), *w5500_pins("SCK")},
+        "ETH_MOSI（IO42）": {*board_pins("IO42"), *w5500_pins("MOSI")},
+        "ETH_MISO（IO41）": {*board_pins("IO41"), *w5500_pins("MISO")},
+        "ETH_CS（IO1）": {*board_pins("IO1"), *w5500_pins("CS"), "R3-2"},
+        "ETH_INT（IO3）": {*board_pins("IO3"), *w5500_pins("INT")},
     }
     if "F1" in parts:  # ヒューズがあれば、端子台 → F1 → 5V
         nets["5V 入力（ヒューズの前）"] = {"J3-1", "F1-1"}
@@ -98,8 +105,23 @@ def parse_protel(text: str) -> tuple[dict[str, list[str]], dict[str, set[str]]]:
     return parts, nets
 
 
+def normalize(parts: dict[str, list[str]], nets: dict[str, set[str]]) -> None:
+    """トランジスタの記号が Q1 でなく U2 などなら、Q1 として扱う。"""
+    if "Q1" in parts:
+        return
+    for alias in TRANSISTOR_ALIASES:
+        if alias in parts:
+            parts["Q1"] = parts.pop(alias)
+            for pins in nets.values():
+                for p in [p for p in pins if p.startswith(alias + "-")]:
+                    pins.discard(p)
+                    pins.add("Q1-" + p.split("-", 1)[1])
+            return
+
+
 def check(parts: dict[str, list[str]], nets: dict[str, set[str]]) -> list[str]:
     """問題点の一覧（日本語）。空なら接続表どおり。"""
+    normalize(parts, nets)
     problems = [f"部品 {ref} がありません" for ref in REQUIRED if ref not in parts]
     unknown = sorted(set(parts) - set(REQUIRED) - set(OPTIONAL))
     if unknown:
@@ -132,9 +154,8 @@ def check(parts: dict[str, list[str]], nets: dict[str, set[str]]) -> list[str]:
     expected_pins = set().union(*expected.values())
     for p, name in sorted(where.items()):
         ref, _, num = p.partition("-")
-        if ref in CHECKED_HEADERS and p not in expected_pins and len(nets[name]) > 1:
-            header = CHECKED_HEADERS[ref]
-            signal = header[int(num) - 1] if num.isdigit() and 0 < int(num) <= len(header) else "?"
+        if ref in CHECKED_PARTS and p not in expected_pins and len(nets[name]) > 1:
+            signal = CHECKED_PARTS[ref].get(int(num), "?") if num.isdigit() else "?"
             problems.append(f"{p}（{signal}）はつながないピンですが、ネット {name} につながっています")
     return problems
 
