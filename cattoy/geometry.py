@@ -10,6 +10,7 @@ from typing import Sequence
 
 Point = tuple[float, float]
 Polygon = Sequence[Point]
+Rect = tuple[float, float, float, float]  # 左, 上, 右, 下
 
 
 def dist(a: Point, b: Point) -> float:
@@ -113,3 +114,21 @@ def shrink_polygon(poly: Polygon, ratio: float) -> list[Point]:
     """重心に向かって ratio（0〜1）だけ縮める。凸多角形向けの簡易版。"""
     c = centroid(poly)
     return [(c[0] + (x - c[0]) * (1 - ratio), c[1] + (y - c[1]) * (1 - ratio)) for x, y in poly]
+
+
+def point_in_rect(p: Point, r: Rect) -> bool:
+    return r[0] <= p[0] <= r[2] and r[1] <= p[1] <= r[3]
+
+
+def expand_rect(r: Rect, m: float) -> Rect:
+    return (r[0] - m, r[1] - m, r[2] + m, r[3] + m)
+
+
+def push_out_of_rect(p: Point, r: Rect, gap: float = 1.0) -> Point:
+    """p が四角の中なら、いちばん近い辺の gap ピクセル外へ出した点を返す（外ならそのまま）。"""
+    if not point_in_rect(p, r):
+        return p
+    x, y = p
+    x1, y1, x2, y2 = r
+    exits = [(x - x1, (x1 - gap, y)), (x2 - x, (x2 + gap, y)), (y - y1, (x, y1 - gap)), (y2 - y, (x, y2 + gap))]
+    return min(exits, key=lambda e: e[0])[1]
