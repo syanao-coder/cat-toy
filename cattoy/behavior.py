@@ -15,7 +15,8 @@
     FREEZE    ぴたっと止まる（飛びかかりを誘う）
     HIDE      一瞬消えて別の場所に現れる（物陰に隠れるイメージ）
 
-安全のため、猫の外接矩形を広げた範囲（keep-out）と、人を検出している間は必ず消灯する。
+安全のため、猫の外接矩形を広げた範囲（keep-out）・禁止エリアの中と、人を検出している間は必ず消灯する。
+禁止エリア（窓・テレビなど）には、レーザー点が入らないよう外へ押し出しながら動かす。
 猫がレーザー点に飛びついて keep-out に入ったら「捕まえた」とみなし、HIDE で別の場所へ逃がす。
 飛びかかってくる猫からは flee_probability の確率で逃げ、残りはわざと捕まえさせる
 （捕まえられないままだと猫がストレスを溜めるため）。
@@ -30,7 +31,10 @@ from dataclasses import dataclass
 from enum import Enum
 
 from .config import PlayConfig
-from .geometry import Point, centroid, clamp_to_polygon, dist, move_towards, point_in_polygon, unit
+from .geometry import (
+    Point, Rect, centroid, clamp_to_polygon, dist, expand_rect, move_towards, point_in_polygon, point_in_rect,
+    push_out_of_rect, unit,
+)
 from .tracker import CatState
 
 log = logging.getLogger(__name__)
@@ -86,7 +90,9 @@ class PlayBehavior:
         finish_point: Point | None = None,
         rng: random.Random | None = None,
         latency_s: float = 0.0,
+        no_go: list[Rect] | None = None,
     ):
+        """no_go: 禁止エリア（画像ピクセル座標の四角）。cfg.no_go_margin の分だけ広げて避ける。"""
         w, h = image_size
         if len(area) < 3:
             area = [(0.0, 0.0), (float(w), 0.0), (float(w), float(h)), (0.0, float(h))]
@@ -113,6 +119,13 @@ class PlayBehavior:
         self._last_t: float | None = None
         self._phase = 0.0
         self._reacted = False
+        self.no_go: list[Rect] = []
+        self.set_no_go_zones(no_go or [])
+
+    def set_no_go_zones(self, zones: list[Rect]) -> None:
+        """禁止エリアを入れ替える（操作画面で保存したとき、遊んでいる最中でもすぐ反映する）。"""
+        m = self.cfg.no_go_margin * self.image_size[0]
+        self.no_go = [expand_rect(z, m) for z in zones]
 
     # ------------------------------------------------------------------ 外部 API
 
@@ -185,6 +198,25 @@ class PlayBehavior:
         x1, y1, x2, y2 = cat.box
         return x1 - m <= p[0] <= x2 + m and y1 - m <= p[1] <= y2 + m
 
+    def _in_no_go(self, p: Point) -> bool:
+        return any(point_in_rect(p, z) for z in self.no_go)
+
+    def _avoid_no_go(self, p: Point) -> Point:
+        """禁止エリアの中なら外へ押し出す（重なった禁止エリアから押し出された先がまた中なら、もう一度）。"""
+        for _ in range(len(self.no_go) + 1):
+            inside = [z for z in self.no_go if point_in_rect(p, z)]
+            if not inside:
+                break
+            p = push_out_of_rect(p, inside[0])
+        return p
+
+    def _move_dot(self, p: Point) -> Point:
+        """レーザー点を遊ぶ範囲の中・禁止エリアの外に置く（両方を満たせないときは _safety が消灯する）。"""
+        p = clamp_to_polygon(p, self.area)
+        if self.no_go:
+            p = clamp_to_polygon(self._avoid_no_go(p), self.area)
+        return p
+
     def _safety(self, cmd: Command, cat: CatState | None, person: bool) -> Command:
         if not cmd.laser_on or cmd.target is None:
             return cmd
@@ -192,6 +224,8 @@ class PlayBehavior:
             cmd.laser_on, cmd.reason = False, "人を検出したため消灯"
         elif cat is not None and self._in_keepout(cmd.target, cat):
             cmd.laser_on, cmd.reason = False, "猫に近すぎるため消灯"
+        elif self._in_no_go(cmd.target):
+            cmd.laser_on, cmd.reason = False, "禁止エリアのため消灯"
         return cmd
 
     def _pick_point(self, cat: CatState, distance: float, spread_deg: float = 70.0, min_from_dot: float = 0.0) -> Point:
@@ -205,7 +239,7 @@ class PlayBehavior:
             r = distance * self.size * self.rng.uniform(0.8, 1.2)
             p = (cat.center[0] + r * math.cos(ang), cat.center[1] + r * math.sin(ang))
             q = clamp_to_polygon(p, self.area, inset=2.0)
-            if self._in_keepout(q, cat):
+            if self._in_keepout(q, cat) or self._in_no_go(q):
                 continue
             too_close = dist(q, self.dot) < min_from_dot
             if point_in_polygon(p, self.area) and not too_close:
@@ -215,8 +249,9 @@ class PlayBehavior:
                 best, best_score = q, score
         if best is not None:
             return best
-        # どこも猫に近い（狭い領域いっぱいに猫がいる）: 猫から最も遠い頂点
-        return max(self.area, key=lambda v: dist(v, cat.center))
+        # どこも猫に近い（狭い領域いっぱいに猫がいる）: 禁止エリアの外で、猫から最も遠い頂点
+        corners = [v for v in self.area if not self._in_no_go(v)] or self.area
+        return max(corners, key=lambda v: dist(v, cat.center))
 
     def _begin(self, move: Move, now: float, cat: CatState, duration: float | None = None) -> None:
         cfg = self.cfg
@@ -287,9 +322,9 @@ class PlayBehavior:
             assert self.anchor is not None
             target, speed, visible = self.anchor, math.inf, False
 
-        target = clamp_to_polygon(target, self.area)
+        target = self._move_dot(target)
         nxt = target if math.isinf(speed) else move_towards(self.dot, target, speed * dt)
-        self.dot = clamp_to_polygon(nxt, self.area)
+        self.dot = self._move_dot(nxt)
         if move is Move.DART and self.anchor is not None and dist(self.dot, self.anchor) < 1.0:
             self._begin(Move.FREEZE, now, cat)
         return Command(visible, self.dot, self.mode, move)
@@ -297,10 +332,10 @@ class PlayBehavior:
     def _finish(self, now: float, dt: float, cat: CatState | None) -> Command:
         if self.finish_point is None or cat is None or now - self.mode_since > _FINISH_TIMEOUT_S:
             return self._enter_cooldown(now)
-        fp = clamp_to_polygon(self.finish_point, self.area)
+        fp = self._move_dot(self.finish_point)
         s = self.size
         if self._finish_reached_at is None:
-            self.dot = move_towards(self.dot, fp, self.cfg.move_speed * s * dt)
+            self.dot = self._move_dot(move_towards(self.dot, fp, self.cfg.move_speed * s * dt))
             if dist(self.dot, fp) < 1.0:
                 self._finish_reached_at = now
         elif now - self._finish_reached_at > _FINISH_WIGGLE_S:
@@ -308,5 +343,5 @@ class PlayBehavior:
         else:
             a = self.cfg.wiggle_amplitude * s
             w = 2 * math.pi * 1.5 * self._phase
-            self.dot = clamp_to_polygon((fp[0] + a * math.sin(w), fp[1] + a * math.sin(1.7 * w)), self.area)
+            self.dot = self._move_dot((fp[0] + a * math.sin(w), fp[1] + a * math.sin(1.7 * w)))
         return Command(True, self.dot, self.mode, None, "終了の誘導中")

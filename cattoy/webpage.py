@@ -67,7 +67,22 @@ h1 { font-size: 18px; margin: 4px 0 0; font-weight: 600; }
 button.plain:disabled { opacity: .45; }
 button.plain { width: 100%; padding: 12px; border-radius: 12px; border: 1px solid var(--line);
                background: transparent; color: var(--text); font-size: 15px; cursor: pointer; }
-#live img { width: 100%; border-radius: 10px; margin-top: 10px; display: block; cursor: crosshair; }
+#live img { width: 100%; border-radius: 10px; display: block; cursor: crosshair; }
+#stage { position: relative; margin-top: 10px; user-select: none; -webkit-user-select: none; }
+#zones { position: absolute; inset: 0; pointer-events: none; }
+#stage.editing #zones { pointer-events: auto; touch-action: none; }
+.zone { position: absolute; border: 2px solid #ef4444; background: rgba(239, 68, 68, .22); border-radius: 4px; }
+.zone .lbl { position: absolute; left: 0; top: 0; background: #ef4444; color: #fff; font-size: 11px; padding: 0 4px;
+             border-radius: 0 0 4px 0; white-space: nowrap; }
+#stage.editing .zone { cursor: move; }
+.zone.sel { border-color: #f59e0b; background: rgba(245, 158, 11, .28); }
+.zone.sel .lbl { background: #f59e0b; left: 12px; }
+.handle { position: absolute; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%;
+          background: #fff; border: 2px solid #f59e0b; box-shadow: 0 1px 4px rgba(0,0,0,.3); }
+.handle.nw { left: 0; top: 0; cursor: nwse-resize; } .handle.ne { left: 100%; top: 0; cursor: nesw-resize; }
+.handle.sw { left: 0; top: 100%; cursor: nesw-resize; } .handle.se { left: 100%; top: 100%; cursor: nwse-resize; }
+.tools { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+.hint { font-size: 13px; color: var(--sub); margin: 8px 0 0; }
 pre { background: var(--bg); padding: 8px; border-radius: 8px; white-space: pre-wrap; word-break: break-all;
       font-size: 12px; }
 details summary { cursor: pointer; color: var(--sub); font-size: 14px; margin-top: 10px; }
@@ -94,7 +109,19 @@ details summary { cursor: pointer; color: var(--sub); font-size: 14px; margin-to
 <section class="card" id="live">
   <button class="plain" id="liveBtn">ライブ映像を見る</button>
   <div id="liveBox" hidden>
-    <img id="liveImg" alt="カメラ映像">
+    <div id="stage"><img id="liveImg" alt="カメラ映像"><div id="zones"></div></div>
+    <button class="plain" id="zoneEdit" style="margin-top:8px">禁止エリアを設定する</button>
+    <div id="zoneTools" hidden>
+      <p class="hint">赤い枠の中（と少し外側）には、遊んでいる間レーザーを当てません。窓・テレビ・鏡・ソファの上などを囲ってください。
+        枠はドラッグで動かし、角の ● で大きさを変えます。</p>
+      <div class="tools">
+        <button class="plain" id="zoneAdd">＋ 枠を追加</button>
+        <button class="plain" id="zoneDel" disabled>選んだ枠を消す</button>
+        <button class="plain" id="zoneSave">保存する</button>
+        <button class="plain" id="zoneCancel">やめる</button>
+      </div>
+    </div>
+    <div id="zoneMsg" class="hint"></div>
     <details>
       <summary>遊ぶ範囲の設定用（映像をタップして座標を記録）</summary>
       <button class="plain" id="clearPts" style="margin-top:8px">記録をクリア</button>
@@ -186,6 +213,7 @@ function render() {
 
   $('needcal').style.display = st.needs_calibration ? 'block' : 'none';
   renderAdjust();
+  if (!zoneEditing) drawZones();
 
   $('maint').hidden = !st.esp32;
   if (st.esp32) {
@@ -222,8 +250,90 @@ $('toggle').onclick = async () => {
 $('liveBtn').onclick = () => {
   const box = $('liveBox'), img = $('liveImg');
   if (box.hidden) { img.src = '/stream?t=' + Date.now(); box.hidden = false; $('liveBtn').textContent = 'ライブ映像を閉じる'; }
-  else { img.removeAttribute('src'); box.hidden = true; $('liveBtn').textContent = 'ライブ映像を見る'; }
+  else { img.removeAttribute('src'); box.hidden = true; $('liveBtn').textContent = 'ライブ映像を見る'; endZoneEdit(); }
 };
+
+// ---------------------------------------------------------------- 禁止エリア（映像の上の四角。座標は 0〜1 の [左, 上, 右, 下]）
+let zones = [], zoneEditing = false, selZone = -1, drag = null;
+const ZONE_MIN = 0.03;
+function clamp(v, lo, hi) { return Math.min(Math.max(v, lo), hi); }
+function savedZones() { return (st && st.no_go_zones) || []; }
+function drawZones() {
+  const list = zoneEditing ? zones : savedZones(), box = $('zones');
+  box.innerHTML = '';
+  list.forEach((z, i) => {
+    const d = document.createElement('div');
+    d.className = 'zone' + (zoneEditing && i === selZone ? ' sel' : '');
+    d.dataset.i = i;
+    d.style.left = z[0] * 100 + '%'; d.style.top = z[1] * 100 + '%';
+    d.style.width = (z[2] - z[0]) * 100 + '%'; d.style.height = (z[3] - z[1]) * 100 + '%';
+    d.innerHTML = '<span class="lbl">禁止 ' + (i + 1) + '</span>';
+    if (zoneEditing && i === selZone) ['nw', 'ne', 'sw', 'se'].forEach(c => {
+      const h = document.createElement('div'); h.className = 'handle ' + c; h.dataset.c = c; d.appendChild(h);
+    });
+    box.appendChild(d);
+  });
+  $('zoneDel').disabled = selZone < 0;
+}
+function endZoneEdit() {
+  zoneEditing = false; selZone = -1; drag = null;
+  $('stage').classList.remove('editing'); $('zoneTools').hidden = true; $('zoneEdit').hidden = false;
+  drawZones();
+}
+function stagePos(e) {
+  const r = $('stage').getBoundingClientRect();
+  return [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height];
+}
+$('zoneEdit').onclick = () => {
+  zones = savedZones().map(z => z.slice()); selZone = -1; zoneEditing = true;
+  $('stage').classList.add('editing'); $('zoneTools').hidden = false; $('zoneEdit').hidden = true; $('zoneMsg').textContent = '';
+  drawZones();
+};
+$('zoneAdd').onclick = () => {
+  if (zones.length >= 20) { $('zoneMsg').textContent = '枠は 20 個までです'; return; }
+  const k = zones.length % 5 * 0.04;
+  zones.push([0.35 + k, 0.35 + k, 0.6 + k, 0.6 + k]);
+  selZone = zones.length - 1; drawZones();
+};
+$('zoneDel').onclick = () => { if (selZone >= 0) { zones.splice(selZone, 1); selZone = -1; drawZones(); } };
+$('zoneCancel').onclick = () => { endZoneEdit(); $('zoneMsg').textContent = ''; };
+$('zoneSave').onclick = async () => {
+  try {
+    const r = await post('/api/no-go-zones', { zones });
+    if (st) st.no_go_zones = r.zones;
+    endZoneEdit();
+    $('zoneMsg').textContent = r.zones.length ? '保存しました（' + r.zones.length + ' 個。すぐに反映されます）' : '禁止エリアをすべて消しました';
+  } catch (e) { $('zoneMsg').textContent = '保存できません: ' + e.message; }
+};
+$('zones').addEventListener('pointerdown', e => {
+  if (!zoneEditing) return;
+  e.preventDefault();
+  const zd = e.target.closest('.zone');
+  if (!zd) { selZone = -1; drawZones(); return; }  // 枠の外を押したら選ぶのをやめる
+  const i = +zd.dataset.i, [x, y] = stagePos(e);
+  selZone = i;
+  drag = { i, c: e.target.dataset.c || 'move', x, y, z: zones[i].slice() };
+  $('zones').setPointerCapture(e.pointerId);
+  drawZones();
+});
+$('zones').addEventListener('pointermove', e => {
+  if (!drag) return;
+  const [x, y] = stagePos(e), dx = x - drag.x, dy = y - drag.y;
+  let [x1, y1, x2, y2] = drag.z;
+  if (drag.c === 'move') {
+    const w = x2 - x1, h = y2 - y1;
+    x1 = clamp(x1 + dx, 0, 1 - w); y1 = clamp(y1 + dy, 0, 1 - h); x2 = x1 + w; y2 = y1 + h;
+  } else {
+    if (drag.c.includes('w')) x1 = clamp(x1 + dx, 0, x2 - ZONE_MIN);
+    if (drag.c.includes('e')) x2 = clamp(x2 + dx, x1 + ZONE_MIN, 1);
+    if (drag.c.includes('n')) y1 = clamp(y1 + dy, 0, y2 - ZONE_MIN);
+    if (drag.c.includes('s')) y2 = clamp(y2 + dy, y1 + ZONE_MIN, 1);
+  }
+  zones[drag.i] = [x1, y1, x2, y2].map(v => Math.round(v * 1000) / 1000);
+  drawZones();
+});
+['pointerup', 'pointercancel'].forEach(ev => $('zones').addEventListener(ev, () => { drag = null; }));
+
 $('liveImg').onclick = e => {
   const r = e.target.getBoundingClientRect();
   pts.push('[' + ((e.clientX - r.left) / r.width).toFixed(3) + ', ' + ((e.clientY - r.top) / r.height).toFixed(3) + ']');

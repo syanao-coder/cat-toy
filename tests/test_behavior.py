@@ -130,3 +130,49 @@ def test_lead_runs_ahead_of_running_cat():
         t += DT
     assert cmd.move is Move.LEAD and cmd.laser_on
     assert cmd.target[0] - c[0] > CAT  # 猫の前方（進行方向）にいる
+
+
+def in_rect(p, r, m=0.0):
+    return r[0] - m <= p[0] <= r[2] + m and r[1] - m <= p[1] <= r[3] + m
+
+
+def test_never_lights_inside_no_go_zones():
+    """禁止エリア（と、その周りの余白）には、遊んでいる間に一度も照射しない。猫が禁止エリアのすぐ横にいても。"""
+    cfg = PlayConfig(session_max_s=120, start_delay_s=0.5)
+    zones = [(200.0, 180.0, 330.0, 300.0), (420.0, 60.0, 600.0, 200.0)]
+    margin = cfg.no_go_margin * W
+    for seed in range(5):
+        rng = random.Random(seed)
+        b = PlayBehavior(cfg, AREA, (W, H), rng=random.Random(seed), no_go=zones)
+        c, v, t, lit, prev = (360.0, 260.0), (0.0, 0.0), 0.0, 0, None
+        while t < 120:
+            cmd = b.step(t, cat_at(c, v))
+            if cmd.laser_on:
+                lit += 1
+                assert not any(in_rect(cmd.target, z, margin) for z in zones), cmd
+                assert point_in_polygon(cmd.target, AREA)
+                if prev is not None:  # 点いたまま禁止エリアを飛び越えない（サーボが動く途中で横切らない）
+                    for k in range(1, 10):
+                        q = (prev[0] + (cmd.target[0] - prev[0]) * k / 10, prev[1] + (cmd.target[1] - prev[1]) * k / 10)
+                        assert not any(in_rect(q, z) for z in zones), (prev, cmd.target)
+            prev = cmd.target if cmd.laser_on else None
+            nc = move_towards(c, cmd.target, 4.0 * CAT * DT) if cmd.laser_on and rng.random() > 0.002 else c
+            v, c = ((nc[0] - c[0]) / DT, (nc[1] - c[1]) / DT), nc
+            t += DT
+        assert lit > 1000  # 禁止エリアがあってもちゃんと遊ぶ
+
+
+def test_no_go_zones_change_while_playing():
+    cfg = PlayConfig(start_delay_s=0.0)
+    b = PlayBehavior(cfg, AREA, (W, H), rng=random.Random(1))
+    cat = cat_at((320.0, 260.0))
+    for i in range(200):
+        b.step(i * DT, cat)
+    whole = (0.0, 0.0, float(W), float(H))
+    b.set_no_go_zones([whole])  # 画面全体を禁止にすると、すぐに消灯する
+    for i in range(200, 400):
+        cmd = b.step(i * DT, cat)
+        assert not cmd.laser_on
+    assert cmd.reason == "禁止エリアのため消灯"
+    b.set_no_go_zones([])
+    assert any(b.step(i * DT, cat).laser_on for i in range(400, 700))

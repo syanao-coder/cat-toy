@@ -87,3 +87,41 @@ def test_precedence_file_env_ui(tmp_path):
     # 設定ファイルがなくても動く（コンテナ用）
     cfg = load_full_config(tmp_path / "none" / "config.toml", {"CATTOY_ESP32_HOST": "10.0.0.3"})
     assert cfg.esp32.host == "10.0.0.3" and cfg.base_dir == tmp_path / "none"
+
+
+def test_normalize_zones():
+    from cattoy.config import normalize_zones
+
+    assert normalize_zones([]) == []
+    assert normalize_zones([[0.6, 0.5, 0.2, 0.1]]) == [[0.2, 0.1, 0.6, 0.5]]  # 向きはそろえる
+    assert normalize_zones([[0, 0, 1.0000001, 0.3]]) == [[0.0, 0.0, 1.0, 0.3]]
+    for bad, msg in [
+        ("x", "形"), ([[0, 0, 0.5]], "4 つ"), ([[0, 0, 1.5, 0.5]], "0〜1"),
+        ([[0.2, 0.2, 0.205, 0.5]], "小さすぎ"), ([[0, 0, 0.1, 0.1]] * 21, "20 個"),
+    ]:
+        with pytest.raises(ValueError, match=msg):
+            normalize_zones(bad)
+
+
+def test_no_go_zones_are_saved_from_the_ui(tmp_path):
+    from cattoy.config import load_full_config, save_ui_settings
+
+    cfg = load_full_config(tmp_path / "config.toml", {})
+    save_ui_settings(cfg, "play", {"no_go_zones": [[0.5, 0.5, 0.1, 0.2]]})
+    assert cfg.play.no_go_zones == [[0.1, 0.2, 0.5, 0.5]]
+    assert load_full_config(tmp_path / "config.toml", {}).play.no_go_zones == [[0.1, 0.2, 0.5, 0.5]]
+    with pytest.raises(ValueError):
+        save_ui_settings(cfg, "play", {"no_go_zones": [[0, 0, 2, 2]]})
+    # 壊れた保存内容は無視して起動する（禁止エリアなしになる）
+    (tmp_path / "settings.json").write_text('{"play": {"no_go_zones": [[0, 0, 9, 9]]}}')
+    assert load_full_config(tmp_path / "config.toml", {}).play.no_go_zones == []
+
+
+def test_push_out_of_rect():
+    from cattoy.geometry import point_in_rect, push_out_of_rect
+
+    r = (100.0, 100.0, 200.0, 160.0)
+    assert push_out_of_rect((50.0, 50.0), r) == (50.0, 50.0)
+    assert push_out_of_rect((110.0, 130.0), r) == (99.0, 130.0)  # 左の辺がいちばん近い
+    assert push_out_of_rect((150.0, 155.0), r) == (150.0, 161.0)  # 下の辺
+    assert not point_in_rect(push_out_of_rect((150.0, 130.0), r), r)

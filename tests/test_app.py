@@ -4,6 +4,7 @@ import json
 import socket
 import threading
 import time
+import urllib.error
 import urllib.request
 
 import numpy as np
@@ -153,3 +154,34 @@ def test_web_api_toggles(sim):
     assert not any(rec["laser"][n:])  # OFF にした後は点灯しない
     th.join(timeout=6.0)
     assert json.loads((cfg.base_dir / "state.json").read_text())["enabled"] is False
+
+
+def test_web_api_saves_no_go_zones(sim):
+    cfg, rec = sim
+    port = free_port()
+    rec["seconds"] = 4.0
+    th = threading.Thread(target=lambda: pytest.raises(StopSim, app.run, cfg, port), daemon=True)
+    th.start()
+    base = f"http://127.0.0.1:{port}"
+    for _ in range(50):
+        try:
+            st = json.loads(urllib.request.urlopen(base + "/api/status", timeout=1).read())
+            break
+        except OSError:
+            time.sleep(0.1)
+    assert st["no_go_zones"] == []
+
+    def post(zones):
+        body = json.dumps({"zones": zones}).encode()
+        req = urllib.request.Request(base + "/api/no-go-zones", data=body, headers={"Content-Type": "application/json"})
+        return json.loads(urllib.request.urlopen(req, timeout=1).read())
+
+    assert post([[0.7, 0.1, 0.4, 0.3]])["zones"] == [[0.4, 0.1, 0.7, 0.3]]
+    st = json.loads(urllib.request.urlopen(base + "/api/status", timeout=1).read())
+    assert st["no_go_zones"] == [[0.4, 0.1, 0.7, 0.3]]
+    saved = json.loads((cfg.base_dir / "settings.json").read_text())
+    assert saved["play"]["no_go_zones"] == [[0.4, 0.1, 0.7, 0.3]]
+    with pytest.raises(urllib.error.HTTPError) as e:
+        post([[0, 0, 3, 3]])
+    assert e.value.code == 400
+    th.join(timeout=6.0)

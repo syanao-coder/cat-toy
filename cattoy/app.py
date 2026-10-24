@@ -25,7 +25,7 @@ from pathlib import Path
 from .behavior import Command, Mode, PlayBehavior
 from .calibration import Calibration
 from .config import Config, is_active_time
-from .geometry import Point
+from .geometry import Point, Rect
 from .hardware import make_camera, make_laser, make_pantilt
 from .tracker import CatTracker, Detection
 
@@ -77,6 +77,12 @@ def play_area(cfg: Config, cal: Calibration, image_size: tuple[int, int]) -> lis
             raise SystemExit("play_area は 3 点以上で指定してください")
         return [(x * w, y * h) for x, y in cfg.play.play_area]
     return cal.default_play_area()
+
+
+def no_go_rects(cfg: Config, image_size: tuple[int, int]) -> list[Rect]:
+    """禁止エリア（0〜1 の座標）を画像のピクセル座標にする。"""
+    w, h = image_size
+    return [(x1 * w, y1 * h, x2 * w, y2 * h) for x1, y1, x2, y2 in cfg.play.no_go_zones]
 
 
 def finish_point(cfg: Config, image_size: tuple[int, int]) -> Point | None:
@@ -177,7 +183,9 @@ class PlaySetup:
         self.area = play_area(cfg, cal, size)
         self.goal = finish_point(cfg, size)
         self.tracker = CatTracker(lost_timeout_s=cfg.play.lost_timeout_s, max_extrapolate_s=0.5 + self.latency)
-        self.behavior = PlayBehavior(cfg.play, self.area, size, finish_point=self.goal, latency_s=self.latency)
+        self.behavior = PlayBehavior(
+            cfg.play, self.area, size, finish_point=self.goal, latency_s=self.latency, no_go=no_go_rects(cfg, size)
+        )
 
 
 AIM_IDLE_S = 60.0  # 可動範囲の調整で、操作がこれだけないと終了する
@@ -230,7 +238,7 @@ def _json_body(body: bytes) -> dict:
 
 def run(cfg: Config, web_port: int | None = None, stop: threading.Event | None = None) -> None:
     from .calibrate import calibrate_with
-    from .config import save_ui_settings
+    from .config import normalize_zones, save_ui_settings
     from .detector import YoloOnnxDetector
 
     stop = stop or threading.Event()
@@ -303,6 +311,7 @@ def run(cfg: Config, web_port: int | None = None, stop: threading.Event | None =
                 "recent": store.recent(),
                 "esp32": esp,
                 "maintenance": m,
+                "no_go_zones": cfg.play.no_go_zones,
                 "servo": {
                     "pan_min": s.pan_min, "pan_max": s.pan_max, "tilt_min": s.tilt_min, "tilt_max": s.tilt_max,
                     "pan_home": s.pan_home, "tilt_home": s.tilt_home, "range": s.actuation_range,
@@ -390,12 +399,22 @@ def run(cfg: Config, web_port: int | None = None, stop: threading.Event | None =
             log.info("操作画面から可動範囲を保存しました: %s", merged)
             return {"ok": True, **merged}
 
+        def save_no_go_zones(body: bytes) -> dict:
+            zones = normalize_zones(_json_body(body).get("zones"))
+            save_ui_settings(cfg, "play", {"no_go_zones": zones})
+            p = play
+            if p is not None:  # 遊んでいる最中でもすぐ反映する
+                p.behavior.set_no_go_zones(no_go_rects(cfg, size))
+            log.info("操作画面から禁止エリアを保存しました（%d 個）: %s", len(zones), zones)
+            return {"ok": True, "zones": zones}
+
         def maintenance_actions() -> dict:
             actions = {
                 "/api/calibrate": start_calibration,
                 "/api/aim": aim,
                 "/api/aim/stop": stop_aim,
                 "/api/servo-limits": save_servo_limits,
+                "/api/no-go-zones": save_no_go_zones,
             }
             if getattr(pantilt, "link", None) is not None:
                 from . import firmware

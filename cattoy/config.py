@@ -112,6 +112,9 @@ class PlayConfig:
     # --- 領域（画像サイズで正規化した 0〜1 の座標）---
     play_area: list[list[float]] = field(default_factory=list)  # 空ならキャリブレーション範囲から自動
     finish_point: list[float] = field(default_factory=list)  # 終了時にここへ誘導（おもちゃ・おやつの場所など）
+    # 禁止エリア: レーザーを当てない四角 [左, 上, 右, 下] の並び（窓・テレビ・ソファなど）。操作画面の映像の上で設定できる
+    no_go_zones: list[list[float]] = field(default_factory=list)
+    no_go_margin: float = 0.02  # 禁止エリアを、画像の幅に対してこの割合だけ広げて避ける（サーボの遅れ・位置合わせの誤差の分）
 
 
 @dataclass
@@ -174,6 +177,7 @@ def load_config(path: str | Path | None) -> Config:
         kwargs[key] = _fill(_SECTIONS[key], value, key)
     cfg = Config(**kwargs, base_dir=path.resolve().parent)
     parse_active_hours(cfg.play.active_hours)  # 書式チェック
+    cfg.play.no_go_zones = normalize_zones(cfg.play.no_go_zones)
     return cfg
 
 
@@ -218,8 +222,44 @@ def apply_env(cfg: Config, environ: Mapping[str, str]) -> list[str]:
     return applied
 
 
+MAX_NO_GO_ZONES = 20
+_MIN_ZONE_SIZE = 0.01
+
+
+def normalize_zones(raw: Any) -> list[list[float]]:
+    """禁止エリアの一覧を確かめて、[左, 上, 右, 下]（0〜1、左＜右・上＜下）にそろえる。おかしければ ValueError。"""
+    if not isinstance(raw, list):
+        raise ValueError("禁止エリアは [[左, 上, 右, 下], ...] の形で指定してください")
+    if len(raw) > MAX_NO_GO_ZONES:
+        raise ValueError(f"禁止エリアは {MAX_NO_GO_ZONES} 個までです")
+    zones = []
+    for i, z in enumerate(raw, 1):
+        try:
+            x1, y1, x2, y2 = (float(v) for v in z)
+        except (TypeError, ValueError):
+            raise ValueError(f"禁止エリア {i} は 4 つの数（左, 上, 右, 下）で指定してください") from None
+        if not all(-1e-6 <= v <= 1 + 1e-6 for v in (x1, y1, x2, y2)):
+            raise ValueError(f"禁止エリア {i} の座標は 0〜1 で指定してください")
+        x1, x2 = sorted((min(max(x1, 0.0), 1.0), min(max(x2, 0.0), 1.0)))
+        y1, y2 = sorted((min(max(y1, 0.0), 1.0), min(max(y2, 0.0), 1.0)))
+        if x2 - x1 < _MIN_ZONE_SIZE or y2 - y1 < _MIN_ZONE_SIZE:
+            raise ValueError(f"禁止エリア {i} が小さすぎます")
+        zones.append([round(x1, 4), round(y1, 4), round(x2, 4), round(y2, 4)])
+    return zones
+
+
 # 操作画面から変えてよい設定（セクション → 項目）
-UI_EDITABLE = {"servo": ("pan_min", "pan_max", "tilt_min", "tilt_max", "pan_home", "tilt_home")}
+UI_EDITABLE = {
+    "servo": ("pan_min", "pan_max", "tilt_min", "tilt_max", "pan_home", "tilt_home"),
+    "play": ("no_go_zones",),
+}
+# 保存・読み込みのときに値を確かめる関数（ないものは今の値と同じ型に変えるだけ）
+_UI_CHECK = {("play", "no_go_zones"): normalize_zones}
+
+
+def _ui_value(cfg: Config, section: str, key: str, value: Any) -> Any:
+    check = _UI_CHECK.get((section, key))
+    return check(value) if check else type(getattr(getattr(cfg, section), key))(value)
 
 
 def apply_ui_settings(cfg: Config) -> None:
@@ -235,7 +275,10 @@ def apply_ui_settings(cfg: Config) -> None:
     for section, values in data.items():
         for key, value in values.items():
             if key in UI_EDITABLE.get(section, ()):
-                setattr(getattr(cfg, section), key, type(getattr(getattr(cfg, section), key))(value))
+                try:
+                    setattr(getattr(cfg, section), key, _ui_value(cfg, section, key, value))
+                except (TypeError, ValueError) as e:
+                    log.warning("%s の %s.%s が不正なので無視します: %s", path, section, key, e)
 
 
 def save_ui_settings(cfg: Config, section: str, values: Mapping[str, Any]) -> None:
@@ -251,7 +294,7 @@ def save_ui_settings(cfg: Config, section: str, values: Mapping[str, Any]) -> No
         data = {}
     obj = getattr(cfg, section)
     for key, value in values.items():
-        value = type(getattr(obj, key))(value)
+        value = _ui_value(cfg, section, key, value)
         setattr(obj, key, value)
         data.setdefault(section, {})[key] = value
     path.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
@@ -270,6 +313,7 @@ def load_full_config(path: str | Path, environ: Mapping[str, str] | None = None)
         log.info("環境変数で設定しました: %s", ", ".join(applied))
     apply_ui_settings(cfg)
     parse_active_hours(cfg.play.active_hours)
+    cfg.play.no_go_zones = normalize_zones(cfg.play.no_go_zones)
     return cfg
 
 
