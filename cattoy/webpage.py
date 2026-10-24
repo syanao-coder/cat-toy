@@ -167,7 +167,7 @@ function render() {
   $('sub').textContent = sub.join('　');
 
   const off = $('offline');
-  if (st.esp32 && !st.esp32.online) { off.textContent = 'ESP32 とつながっていません（電源と Wi-Fi を確認してください）'; off.style.display = 'block'; }
+  if (st.esp32 && !st.esp32.online) { off.textContent = 'ESP32 とつながっていません（電源と LAN・Wi-Fi を確認してください）'; off.style.display = 'block'; }
   else off.style.display = 'none';
 
   $('today').textContent = fmtMin(st.today_play_s);
@@ -181,7 +181,7 @@ function render() {
     ['認識', st.detector + '・' + visionText + (st.vision === 'active' ? '（' + st.fps + ' fps）' : '')],
     ['映像の遅れ', st.latency_ms + ' ms'],
   ];
-  if (st.esp32 && st.esp32.online) rows.push(['ESP32 の電波', st.esp32.rssi + ' dBm']);
+  if (st.esp32 && st.esp32.online) rows.push(st.esp32.link === 'eth' ? ['ESP32 の接続', '有線 LAN'] : ['ESP32 の電波', st.esp32.rssi + ' dBm']);
   $('detail').innerHTML = rows.map(r => '<div class="row"><span>' + r[0] + '</span><span>' + r[1] + '</span></div>').join('');
 
   $('needcal').style.display = st.needs_calibration ? 'block' : 'none';

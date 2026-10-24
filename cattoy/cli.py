@@ -127,7 +127,8 @@ def _print_status(st: dict | None) -> None:
         print("ESP32 から応答がありません")
         return
     print(f"  ファームウェア {st.get('fw')}（{st.get('built')}・{st.get('partition')}）")
-    print(f"  Wi-Fi {st.get('ssid')}  電波 {st.get('rssi')} dBm  IP {st.get('ip')}  MAC {st.get('mac', '?')}  起動から {st.get('uptime_s')} 秒")
+    link = "有線 LAN" if st.get("link") == "eth" else f"Wi-Fi {st.get('ssid')}  電波 {st.get('rssi')} dBm"
+    print(f"  {link}  IP {st.get('ip')}  MAC {st.get('mac', '?')}  起動から {st.get('uptime_s')} 秒")
 
 
 def _cmd_esp32_status(cfg: Config, args: argparse.Namespace) -> None:
