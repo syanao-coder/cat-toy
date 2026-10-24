@@ -24,6 +24,29 @@ jobs:
       - run: pip install -e '.[dev]'
       - run: pytest -q
 
+  # ESP32 のファームウェアがコンパイルできることを確かめる（書き込みは各自の PC から）
+  firmware:
+    runs-on: ubuntu-latest
+    env:
+      ESP32_URL: https://espressif.github.io/arduino-esp32/package_esp32_index.json
+      ESP32_CORE: esp32:esp32@3.2.0
+      FQBN: esp32:esp32:esp32s3:PSRAM=opi,FlashSize=16M,PartitionScheme=app3M_fat9M_16MB
+    steps:
+      - uses: actions/checkout@v4
+      - uses: arduino/setup-arduino-cli@v2
+      - uses: actions/cache@v4
+        with:
+          path: ~/.arduino15
+          key: arduino15-${{ env.ESP32_CORE }}
+      - name: esp32 ボードパッケージを入れる
+        run: |
+          arduino-cli core update-index --additional-urls "$ESP32_URL"
+          arduino-cli core install "$ESP32_CORE" --additional-urls "$ESP32_URL"
+      - name: コンパイル（secrets.h は見本をそのまま使う）
+        run: |
+          cp firmware/cattoy_esp32/secrets.example.h firmware/cattoy_esp32/secrets.h
+          arduino-cli compile --fqbn "$FQBN" --warnings default firmware/cattoy_esp32
+
   image:
     needs: test
     runs-on: ubuntu-latest

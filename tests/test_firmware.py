@@ -130,6 +130,15 @@ def test_set_wifi_and_reboot(fake_esp32):
     assert rec["posts"][-1][0] == "/reboot"
 
 
+def test_status_shows_wired_or_wifi(capsys):
+    base = {"fw": "0.3.0", "ip": "192.168.1.50", "mac": "24:58:7C:00:00:01", "uptime_s": 5}
+    cli._print_status({**base, "link": "eth", "rssi": 0, "ssid": ""})
+    out = capsys.readouterr().out
+    assert "有線 LAN" in out and "dBm" not in out
+    cli._print_status({**base, "link": "wifi", "rssi": -55, "ssid": "home"})  # 0.2.x は link が無いが同じ表示
+    assert "Wi-Fi home  電波 -55 dBm" in capsys.readouterr().out
+
+
 def test_cli_esp32_update(fake_esp32, tmp_path, monkeypatch, capsys):
     cfg, rec = fake_esp32
     conf = tmp_path / "config.toml"

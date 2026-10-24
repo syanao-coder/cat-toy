@@ -11,8 +11,11 @@
 //   :80/reboot  POST   再起動する
 //   :80/wifi    POST   Wi-Fi の SSID・パスワードを変えて再起動する（ssid=...&pass=...）
 //   ArduinoOTA         Arduino IDE の「ネットワークポート」から直接書き込むこともできる
-//   新しいファームウェアが起動に失敗したら（1 分以内に Wi-Fi につながらない・3 回起動しても確定できない）、自動で前の版に戻る。
+//   新しいファームウェアが起動に失敗したら（1 分以内にネットワークにつながらない・3 回起動しても確定できない）、自動で前の版に戻る。
 //   Wi-Fi に 3 分つながらなければ、設定用のアクセスポイント「cattoy-setup」を出す。
+//
+// 有線 LAN: W5500 を挿してあり、LAN ケーブルで IP アドレスがもらえたら有線を使い、Wi-Fi は切る（電力を抑える）。
+//           W5500 がない・ケーブルが抜けている・IP がもらえないときは、今までどおり Wi-Fi を使う。
 //
 // 安全装置: 指令が 0.3 秒届かなければレーザーを消し、3 秒届かなければサーボを止める。
 //           Wi-Fi が切れても NAS のプログラムが止まっても、書き換え中も、レーザーが点いたままにはならない。
@@ -21,6 +24,7 @@
 // 必要なもの: Arduino IDE ＋ esp32 ボードパッケージ 3.x（書き込み方法は firmware/README.md）
 
 #include <ArduinoOTA.h>
+#include <ETH.h>
 #include <ESPmDNS.h>
 #include <Preferences.h>
 #include <Update.h>
@@ -33,7 +37,7 @@
 #include "esp_partition.h"
 #include "secrets.h"  // secrets.example.h をコピーして作る（Wi-Fi の SSID・パスワードなど）
 
-#define FW_VERSION "0.2.2"
+#define FW_VERSION "0.3.0"
 
 // NAS が書き込む前に「このリポジトリのファームウェアか」「版とビルド日時」を確かめるための目印。消さないこと。
 // （目印のないファームウェアには遠隔更新や自動の巻き戻しが入っておらず、書き込むと設置したまま戻せなくなるため）
@@ -64,13 +68,16 @@ extern "C" const char CATTOY_FW_TAG[] = "CATTOY_FW|" FW_VERSION "|" __DATE__ " "
 #define BUTTON_PIN 0   // 基板の BOOT ボタン（起動後は普通のボタンとして使える）
 #define RGB_LED_PIN 48 // 基板のフルカラー LED（状態表示）
 
-// 有線 LAN（W5500）用に予約（docs/hardware.md の「有線 LAN 用の口」）。ほかの用途に使わないこと。
-// IO2 はボード上の LED につながっているので、ESP32 が出力する SCK に使う（W5500 が出力する MISO には使わない）
+// 有線 LAN（W5500）。docs/hardware.md の「有線 LAN 用の口」・docs/pcb.md の接続表と同じ。ほかの用途に使わないこと。
+// IO2 はボード上の LED につながっているので、ESP32 が出力する SCK に使う（W5500 が出力する MISO には使わない）。
+// 通信中はその LED がかすかに光る。W5500 の RST は基板の抵抗で 3.3V に固定（ESP32 からは動かさない）
 #define ETH_SCK_PIN 2
 #define ETH_MOSI_PIN 42
 #define ETH_MISO_PIN 41
 #define ETH_CS_PIN 1
 #define ETH_INT_PIN 3
+#define ETH_RST_PIN -1
+#define ETH_SPI_MHZ 20
 
 // GPIO35〜37 は N16R8 では PSRAM が使っているので使わないこと。
 // GPIO38〜40 はボードの microSD、19・20 と 43・44 は USB-C、45・46 は起動モードを決めるピン
@@ -86,6 +93,9 @@ extern "C" const char CATTOY_FW_TAG[] = "CATTOY_FW|" FW_VERSION "|" __DATE__ " "
 #define LASER_TIMEOUT_MS 300
 #define SERVO_TIMEOUT_MS 3000
 
+#define ETH_TIMEOUT_MS (20UL * 1000)              // W5500 があるとき、有線で IP がもらえるまで待つ時間（過ぎたら Wi-Fi へ）
+#define ETH_LINK_TIMEOUT_MS (5UL * 1000)          // ケーブルの接続（リンク）がこれだけ来なければ、ケーブルなしとみなす
+#define ETH_LOST_RESTART_MS (60UL * 1000)        // 有線でつないだ後、LAN がこれだけ切れたままなら再起動する
 #define WIFI_TIMEOUT_MS (3UL * 60 * 1000)          // これだけつながらなければ設定用アクセスポイントを出す
 #define WIFI_TIMEOUT_NEW_FW_MS (60UL * 1000)       // 書き換え直後の初回起動でこれだけつながらなければ前の版に戻す
 #define SETUP_AP_SSID "cattoy-setup"
@@ -117,8 +127,14 @@ static volatile unsigned long rebootAt = 0;  // 0 以外ならこの時刻に再
 static bool setupMode = false;               // 設定用アクセスポイントを出している
 static bool newFirmware = false;             // 書き換え直後の試運転中（Wi-Fi につながるまで仮の状態）
 static bool idfPendingVerify = false;        // ブートローダーの自動ロールバックが有効な環境での「確認待ち」状態
+static bool wired = false;                   // 有線 LAN（W5500）でつながっている
 static Preferences prefs;
 static String wifiSsid, wifiPass;
+
+// ---------------------------------------------------------------- ネットワーク（有線か Wi-Fi か）
+static bool netConnected() { return wired ? ETH.linkUp() && ETH.hasIP() : WiFi.status() == WL_CONNECTED; }
+static IPAddress netIp() { return wired ? ETH.localIP() : WiFi.localIP(); }
+static String netMac() { return wired ? ETH.macAddress() : WiFi.macAddress(); }
 
 // ---------------------------------------------------------------- 出力
 static uint32_t pulseToDuty(int us) {
@@ -202,12 +218,12 @@ static esp_err_t statusHandler(httpd_req_t *req) {
   char json[640];
   const esp_partition_t *running = esp_ota_get_running_partition();
   snprintf(json, sizeof(json),
-           "{\"fw\":\"%s\",\"built\":\"%s %s\",\"partition\":\"%s\",\"uptime_s\":%lu,\"rssi\":%d,"
+           "{\"fw\":\"%s\",\"built\":\"%s %s\",\"partition\":\"%s\",\"uptime_s\":%lu,\"link\":\"%s\",\"rssi\":%d,"
            "\"ssid\":\"%s\",\"ip\":\"%s\",\"mac\":\"%s\",\"laser\":%d,\"servo\":%d,\"pan_us\":%d,\"tilt_us\":%d,"
            "\"cmd_age_ms\":%lu,\"cmd_count\":%lu,\"button\":%lu,\"stream_clients\":%d,\"updating\":%d,\"trial\":%d,"
            "\"free_heap\":%u,\"free_psram\":%u}",
-           FW_VERSION, __DATE__, __TIME__, running ? running->label : "?", millis() / 1000, WiFi.RSSI(),
-           wifiSsid.c_str(), WiFi.localIP().toString().c_str(), WiFi.macAddress().c_str(), laserOn ? 1 : 0, servoOn ? 1 : 0, panUs, tiltUs,
+           FW_VERSION, __DATE__, __TIME__, running ? running->label : "?", millis() / 1000, wired ? "eth" : "wifi",
+           wired ? 0 : WiFi.RSSI(), wired ? "" : wifiSsid.c_str(), netIp().toString().c_str(), netMac().c_str(), laserOn ? 1 : 0, servoOn ? 1 : 0, panUs, tiltUs,
            millis() - lastCmdMs, cmdCount, buttonCount, streamClients, updating ? 1 : 0, newFirmware ? 1 : 0,
            (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getFreePsram());
   httpd_resp_set_type(req, "application/json");
@@ -255,8 +271,8 @@ static esp_err_t reply(httpd_req_t *req, const char *status, const char *text) {
   return httpd_resp_sendstr(req, text);
 }
 
-// 書き換えたら「試運転」の印を付ける。新しい版は起動のたびに数え、Wi-Fi につながったら印を消す。
-// 3 回起動しても確定できない・1 分以内に Wi-Fi につながらない場合は、前の版に戻す。
+// 書き換えたら「試運転」の印を付ける。新しい版は起動のたびに数え、ネットワークにつながったら印を消す。
+// 3 回起動しても確定できない・1 分以内にネットワークにつながらない場合は、前の版に戻す。
 // （ブートローダーの自動ロールバックが無効な Arduino 環境でも戻せるよう、自前でも行う）
 static void armTrial() {
   const esp_partition_t *running = esp_ota_get_running_partition();
@@ -462,13 +478,45 @@ static bool startCamera() {
   return true;
 }
 
-// Arduino の既定では起動するとすぐ「この版で確定」になる。確定を Wi-Fi につながった後まで遅らせる
+// Arduino の既定では起動するとすぐ「この版で確定」になる。確定をネットワークにつながった後まで遅らせる
 extern "C" bool verifyRollbackLater() { return true; }
 
 static bool isNewFirmware() {
   const esp_partition_t *running = esp_ota_get_running_partition();
   esp_ota_img_states_t state;
   return running && esp_ota_get_state_partition(running, &state) == ESP_OK && state == ESP_OTA_IMG_PENDING_VERIFY;
+}
+
+// W5500 が挿してあれば有線でつなぐ。W5500 がない・IP がもらえないときは false（Wi-Fi を使う）
+static bool connectEthernet(unsigned long timeoutMs) {
+  Network.setHostname(CATTOY_HOSTNAME);
+  if (!ETH.begin(ETH_PHY_W5500, 1, ETH_CS_PIN, ETH_INT_PIN, ETH_RST_PIN, SPI2_HOST, ETH_SCK_PIN, ETH_MISO_PIN,
+                 ETH_MOSI_PIN, ETH_SPI_MHZ)) {
+    Serial.println("W5500 が見つかりません（Wi-Fi でつなぎます）");
+    return false;
+  }
+  Serial.print("有線 LAN に接続中");
+  unsigned long start = millis();
+  while (!(ETH.linkUp() && ETH.hasIP())) {
+    unsigned long waited = millis() - start;
+    if (waited > timeoutMs || (!ETH.linkUp() && waited > ETH_LINK_TIMEOUT_MS)) {
+      Serial.println(ETH.linkUp() ? "\n有線 LAN で IP アドレスがもらえませんでした（Wi-Fi でつなぎます）"
+                                  : "\nLAN ケーブルがつながっていません（Wi-Fi でつなぎます）");
+      ETH.end();
+      return false;
+    }
+    setLed(0, 10, 10);
+    delay(250);
+    setLed(0, 0, 0);
+    delay(250);
+    Serial.print(".");
+  }
+  WiFi.mode(WIFI_OFF);  // 有線のときは Wi-Fi を切って、ボードの 3.3V の消費を抑える
+  Serial.printf("\n有線 LAN でつながりました。IP アドレス: %s（NAS の CATTOY_ESP32_HOST に書く）\n",
+                ETH.localIP().toString().c_str());
+  Serial.printf("MAC アドレス: %s（Wi-Fi のときとは違う。ルーターの DHCP 固定割り当てに登録すると IP が変わらなくなる）\n",
+                ETH.macAddress().c_str());
+  return true;
 }
 
 static bool connectWifi(unsigned long timeoutMs) {
@@ -556,8 +604,9 @@ void setup() {
     delay(5000);
     ESP.restart();
   }
-  if (!connectWifi(newFirmware ? WIFI_TIMEOUT_NEW_FW_MS : WIFI_TIMEOUT_MS)) {
-    if (newFirmware) revertToPrevious("新しい版で Wi-Fi につながりません");
+  wired = connectEthernet(ETH_TIMEOUT_MS);
+  if (!wired && !connectWifi(newFirmware ? WIFI_TIMEOUT_NEW_FW_MS : WIFI_TIMEOUT_MS)) {
+    if (newFirmware) revertToPrevious("新しい版でネットワークにつながりません");
     startSetupAp();
     return;
   }
@@ -588,6 +637,18 @@ void loop() {
   if (laserOn && age > LASER_TIMEOUT_MS) setLaser(false);
   if (servoOn && age > SERVO_TIMEOUT_MS) setServos(false, panUs, tiltUs);
 
+  // 有線でつないだ後、LAN が切れたままなら再起動する（ケーブルが抜けたままなら、次は Wi-Fi でつなぐ）
+  static unsigned long netLostAt = 0;
+  if (netConnected()) {
+    netLostAt = 0;
+  } else if (netLostAt == 0) {
+    netLostAt = millis() | 1;
+  } else if (wired && millis() - netLostAt > ETH_LOST_RESTART_MS) {
+    Serial.println("有線 LAN が切れたままなので再起動します");
+    setLaser(false);
+    ESP.restart();
+  }
+
   // BOOT ボタン: 押された回数を数える（NAS が /status を見て ON/OFF を切り替える）
   static bool lastPressed = false;
   static unsigned long changedAt = 0;
@@ -598,12 +659,15 @@ void loop() {
     if (pressed) buttonCount++;
   }
 
-  // LED: 赤=レーザー点灯中 / 緑=NAS とつながっている / 黄=NAS からの指令なし / 青点滅=Wi-Fi 接続中 / 白=書き換え中
+  // LED: 赤=レーザー点灯中 / 緑=NAS とつながっている / 黄=NAS からの指令なし / 青点滅=Wi-Fi 接続中 / 水色点滅=有線 LAN 接続中 / 白=書き換え中
   static unsigned long ledAt = 0;
   if (millis() - ledAt > 200) {
     ledAt = millis();
     if (updating) setLed(15, 15, 15);
-    else if (WiFi.status() != WL_CONNECTED) setLed(0, 0, (millis() / 250) % 2 ? 20 : 0);
+    else if (!netConnected()) {
+      bool on = (millis() / 250) % 2;
+      setLed(0, wired && on ? 10 : 0, on ? (wired ? 10 : 20) : 0);
+    }
     else if (laserOn) setLed(25, 0, 0);
     else if (age < 2000) setLed(0, 10, 0);
     else setLed(10, 8, 0);
